@@ -12,14 +12,14 @@
     "video-composition"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/yourusername/n8n-nodes-sb-render",
+  "homepage": "https://github.com/choisb87/sb-render",
   "author": {
-    "name": "Your Name",
-    "email": "your.email@example.com"
+    "name": "choisb87",
+    "email": "choisb87@gmail.com"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/n8n-nodes-sb-render.git"
+    "url": "git+https://github.com/choisb87/sb-render.git"
   },
   "main": "index.js",
   "scripts": {

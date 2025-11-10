@@ -433,8 +433,8 @@ Contributions are welcome! Please:
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/n8n-nodes-sb-render/issues)
-- **Documentation**: [GitHub Wiki](https://github.com/yourusername/n8n-nodes-sb-render/wiki)
+- **Issues**: [GitHub Issues](https://github.com/choisb87/sb-render/issues)
+- **Documentation**: [GitHub Wiki](https://github.com/choisb87/sb-render/wiki)
 - **n8n Community**: [n8n Community Forum](https://community.n8n.io/)
 
 ---

@@ -1,0 +1,127 @@
+{
+  "name": "SB Render Test Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Test data: 6 video scenes\nconst scenes = [\n  {\n    \"video_url\": \"https://d288ub56sdnkmp.cloudfront.net/kling/2OZ_0JkRRgtYFpOzkmOz4_output.mp4\",\n    \"audio_url\": \"https://d288ub56sdnkmp.cloudfront.net/elevenlabs/ZomKQPqRNwDwvNyz33eJ.mp3\",\n    \"subtitle\": \"출근 완료. 열심히 일할 준비가 되었습니다.\"\n  },\n  {\n    \"video_url\": \"https://d288ub56sdnkmp.cloudfront.net/kling/FtgBzcH4DHu9qFwCdmBLg_output.mp4\",\n    \"audio_url\": \"https://d288ub56sdnkmp.cloudfront.net/elevenlabs/3hDKyvgzTCvJSFszyUav.mp3\",\n    \"subtitle\": \"우리 인간처럼 커피도 마신다.\"\n  },\n  {\n    \"video_url\": \"https://d288ub56sdnkmp.cloudfront.net/kling/b7YhMBTOBEru1jb8vQP7f_output.mp4\",\n    \"audio_url\": \"https://d288ub56sdnkmp.cloudfront.net/elevenlabs/S2860YIc8QwZptq5SWGY.mp3\",\n    \"subtitle\": \"동료들도 좋아한다. 우리는 팀이다.\"\n  },\n  {\n    \"video_url\": \"https://d288ub56sdnkmp.cloudfront.net/kling/pzP_GLDzw9oP3lpSe0kGS_output.mp4\",\n    \"audio_url\": \"https://d288ub56sdnkmp.cloudfront.net/elevenlabs/9XzleeZuTuzN9SktctA7.mp3\",\n    \"subtitle\": \"네, 동의합니다. 좋은 의견입니다.\"\n  },\n  {\n    \"video_url\": \"https://d288ub56sdnkmp.cloudfront.net/kling/QDZ1ouu4VbGVb5YhU1N9e_output.mp4\",\n    \"audio_url\": \"https://d288ub56sdnkmp.cloudfront.net/elevenlabs/ODxEZR4V6VuxH4Sd8EXK.mp3\",\n    \"subtitle\": \"퇴근 시간이다. 하루 일당을 받을 때.\"\n  },\n  {\n    \"video_url\": \"https://d288ub56sdnkmp.cloudfront.net/kling/wk8MGGcONrYnxWG9VegrG_output.mp4\",\n    \"audio_url\": \"https://d288ub56sdnkmp.cloudfront.net/elevenlabs/IbhLzaLycZG3huGDMQVd.mp3\",\n    \"subtitle\": \"사실은 연기였다. 좋은 배우가 되는 법.\"\n  }\n];\n\nreturn scenes.map((scene, index) => ({\n  json: {\n    sceneIndex: index + 1,\n    ...scene\n  }\n}));"
+      },
+      "name": "Load Test Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "id": "load-data"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [450, 300],
+      "id": "split-batches"
+    },
+    {
+      "parameters": {
+        "resource": "Video",
+        "operation": "Render",
+        "videoSource": "url",
+        "videoUrl": "={{ $json.video_url }}",
+        "enableBGM": false,
+        "enableNarration": true,
+        "narrationSource": "url",
+        "narrationUrl": "={{ $json.audio_url }}",
+        "narrationVolume": 85,
+        "narrationDelay": 0,
+        "enableSubtitles": true,
+        "subtitles": {
+          "subtitle": [
+            {
+              "text": "={{ $json.subtitle }}",
+              "startTime": 0,
+              "endTime": 5,
+              "position": "bottom",
+              "fontSize": 60,
+              "fontColor": "#FFFFFF",
+              "fontFamily": "Arial",
+              "alignment": "center",
+              "backgroundColor": "#000000",
+              "backgroundOpacity": 80,
+              "borderColor": "#000000",
+              "borderWidth": 3
+            }
+          ]
+        },
+        "outputFormat": "mp4",
+        "videoCodec": "libx264",
+        "quality": "high",
+        "outputBinaryProperty": "data"
+      },
+      "name": "SB Render",
+      "type": "n8n-nodes-base.sbRender",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "sb-render"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=scene_{{ $json.sceneIndex }}_rendered.mp4",
+        "options": {}
+      },
+      "name": "Write Binary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "write-file"
+    }
+  ],
+  "connections": {
+    "Load Test Data": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "SB Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SB Render": {
+      "main": [
+        [
+          {
+            "node": "Write Binary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Binary File": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

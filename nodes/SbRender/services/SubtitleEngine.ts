@@ -153,7 +153,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
   /**
    * Convert hex color to ASS color format (&HAABBGGRR)
    */
-  private hexToASSColor(hex: string, opacity: number = 100): string {
+  private hexToASSColor(hex: string, opacity = 100): string {
     // Remove # if present
     hex = hex.replace('#', '');
 

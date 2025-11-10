@@ -19,6 +19,7 @@ import {
 import type {
   ISbRenderNodeParams,
   IAudioMixConfig,
+  ISubtitleConfig,
 } from './interfaces';
 
 import { DEFAULTS as DEFAULT_VALUES } from './interfaces';
@@ -232,7 +233,7 @@ export class SbRender implements INodeType {
       },
 
       {
-        displayName: 'BGM Fade In (seconds)',
+        displayName: 'BGM Fade In (Seconds)',
         name: 'bgmFadeIn',
         type: 'number',
         displayOptions: {
@@ -250,7 +251,7 @@ export class SbRender implements INodeType {
       },
 
       {
-        displayName: 'BGM Fade Out (seconds)',
+        displayName: 'BGM Fade Out (Seconds)',
         name: 'bgmFadeOut',
         type: 'number',
         displayOptions: {
@@ -361,7 +362,7 @@ export class SbRender implements INodeType {
       },
 
       {
-        displayName: 'Narration Delay (seconds)',
+        displayName: 'Narration Delay (Seconds)',
         name: 'narrationDelay',
         type: 'number',
         displayOptions: {
@@ -414,151 +415,137 @@ export class SbRender implements INodeType {
             name: 'subtitle',
             displayName: 'Subtitle',
             values: [
-              {
-                displayName: 'Text',
-                name: 'text',
-                type: 'string',
-                default: '',
-                description: 'Subtitle text content',
-              },
-              {
-                displayName: 'Start Time (seconds)',
-                name: 'startTime',
-                type: 'number',
-                default: 0,
-                description: 'When the subtitle appears',
-              },
-              {
-                displayName: 'End Time (seconds)',
-                name: 'endTime',
-                type: 'number',
-                default: 5,
-                description: 'When the subtitle disappears',
-              },
-              {
-                displayName: 'Position',
-                name: 'position',
-                type: 'options',
-                options: [
-                  {
-                    name: 'Top',
-                    value: 'top',
-                  },
-                  {
-                    name: 'Middle',
-                    value: 'middle',
-                  },
-                  {
-                    name: 'Bottom',
-                    value: 'bottom',
-                  },
-                  {
-                    name: 'Custom',
-                    value: 'custom',
-                  },
-                ],
-                default: 'bottom',
-                description: 'Vertical position of the subtitle',
-              },
-              {
-                displayName: 'Custom X Position',
-                name: 'customX',
-                type: 'number',
-                displayOptions: {
-                  show: {
-                    position: ['custom'],
-                  },
-                },
-                default: 960,
-                description: 'Horizontal position in pixels (for custom position)',
-              },
-              {
-                displayName: 'Custom Y Position',
-                name: 'customY',
-                type: 'number',
-                displayOptions: {
-                  show: {
-                    position: ['custom'],
-                  },
-                },
-                default: 980,
-                description: 'Vertical position in pixels (for custom position)',
-              },
-              {
-                displayName: 'Font Size',
-                name: 'fontSize',
-                type: 'number',
-                default: 48,
-                description: 'Size of the subtitle text',
-              },
-              {
-                displayName: 'Font Color',
-                name: 'fontColor',
-                type: 'color',
-                default: '#FFFFFF',
-                description: 'Color of the subtitle text',
-              },
-              {
-                displayName: 'Font Family',
-                name: 'fontFamily',
-                type: 'string',
-                default: 'Arial',
-                description: 'Font family for the subtitle',
-              },
-              {
-                displayName: 'Alignment',
-                name: 'alignment',
-                type: 'options',
-                options: [
-                  {
-                    name: 'Left',
-                    value: 'left',
-                  },
-                  {
-                    name: 'Center',
-                    value: 'center',
-                  },
-                  {
-                    name: 'Right',
-                    value: 'right',
-                  },
-                ],
-                default: 'center',
-                description: 'Text alignment',
-              },
-              {
-                displayName: 'Background Color',
-                name: 'backgroundColor',
-                type: 'color',
-                default: '#000000',
-                description: 'Background color of the subtitle',
-              },
-              {
-                displayName: 'Background Opacity',
-                name: 'backgroundOpacity',
-                type: 'number',
-                typeOptions: {
-                  minValue: 0,
-                  maxValue: 100,
-                },
-                default: 80,
-                description: 'Opacity of the background (0-100)',
-              },
-              {
-                displayName: 'Border Color',
-                name: 'borderColor',
-                type: 'color',
-                default: '#000000',
-                description: 'Color of the subtitle border',
-              },
-              {
-                displayName: 'Border Width',
-                name: 'borderWidth',
-                type: 'number',
-                default: 2,
-                description: 'Width of the subtitle border in pixels',
-              },
-            ],
+											{
+												displayName: 'Alignment',
+												name: 'alignment',
+												type: 'options',
+												options: [
+													{
+														name: 'Left',
+														value: 'left',
+													},
+													{
+														name: 'Center',
+														value: 'center',
+													},
+													{
+														name: 'Right',
+														value: 'right',
+													},
+												],
+												default: 'center',
+												description: 'Text alignment',
+											},
+											{
+												displayName: 'Background Color',
+												name: 'backgroundColor',
+												type: 'color',
+												default: '#000000',
+												description: 'Background color of the subtitle',
+											},
+											{
+												displayName: 'Background Opacity',
+												name: 'backgroundOpacity',
+												type: 'number',
+												default: 80,
+												description: 'Opacity of the background (0-100)',
+											},
+											{
+												displayName: 'Border Color',
+												name: 'borderColor',
+												type: 'color',
+												default: '#000000',
+												description: 'Color of the subtitle border',
+											},
+											{
+												displayName: 'Border Width',
+												name: 'borderWidth',
+												type: 'number',
+												default: 2,
+												description: 'Width of the subtitle border in pixels',
+											},
+											{
+												displayName: 'Custom X Position',
+												name: 'customX',
+												type: 'number',
+												default: 960,
+												description: 'Horizontal position in pixels (for custom position)',
+											},
+											{
+												displayName: 'Custom Y Position',
+												name: 'customY',
+												type: 'number',
+												default: 980,
+												description: 'Vertical position in pixels (for custom position)',
+											},
+											{
+												displayName: 'End Time (Seconds)',
+												name: 'endTime',
+												type: 'number',
+												default: 5,
+												description: 'When the subtitle disappears',
+											},
+											{
+												displayName: 'Font Color',
+												name: 'fontColor',
+												type: 'color',
+												default: '#FFFFFF',
+												description: 'Color of the subtitle text',
+											},
+											{
+												displayName: 'Font Family',
+												name: 'fontFamily',
+												type: 'string',
+												default: 'Arial',
+												description: 'Font family for the subtitle',
+											},
+											{
+												displayName: 'Font Size',
+												name: 'fontSize',
+												type: 'number',
+												default: 48,
+												description: 'Size of the subtitle text',
+											},
+											{
+												displayName: 'Position',
+												name: 'position',
+												type: 'options',
+												options: [
+													{
+														name: 'Top',
+														value: 'top',
+													},
+													{
+														name: 'Middle',
+														value: 'middle',
+													},
+													{
+														name: 'Bottom',
+														value: 'bottom',
+													},
+													{
+														name: 'Custom',
+														value: 'custom',
+													},
+													],
+												default: 'bottom',
+												description: 'Vertical position of the subtitle',
+											},
+											{
+												displayName: 'Start Time (Seconds)',
+												name: 'startTime',
+												type: 'number',
+												default: 0,
+												description: 'When the subtitle appears',
+											},
+											{
+												displayName: 'Text',
+												name: 'text',
+												type: 'string',
+												default: '',
+												description: 'Subtitle text content',
+											},
+									],
           },
         ],
       },
@@ -604,11 +591,11 @@ export class SbRender implements INodeType {
         },
         options: [
           {
-            name: 'H.264 (libx264)',
+            name: 'H.264 (Libx264)',
             value: 'libx264',
           },
           {
-            name: 'H.265 (libx265)',
+            name: 'H.265 (Libx265)',
             value: 'libx265',
           },
           {
@@ -764,18 +751,18 @@ export class SbRender implements INodeType {
             let bgmPath: string | null = null;
             let narrationPath: string | null = null;
 
-            if (params.enableBGM) {
+            if (params.enableBGM && params.bgmSource) {
               bgmPath = await getMediaFile(
-                params.bgmSource!,
+                params.bgmSource,
                 params.bgmUrl,
                 params.bgmBinaryProperty,
                 itemIndex,
               );
             }
 
-            if (params.enableNarration) {
+            if (params.enableNarration && params.narrationSource) {
               narrationPath = await getMediaFile(
-                params.narrationSource!,
+                params.narrationSource,
                 params.narrationUrl,
                 params.narrationBinaryProperty,
                 itemIndex,
@@ -802,7 +789,7 @@ export class SbRender implements INodeType {
             // 5. Generate subtitles if enabled
             let subtitlePath: string | null = null;
             if (params.enableSubtitles && params.subtitles) {
-              const subtitleArray = (params.subtitles as any).subtitle || [];
+              const subtitleArray = (params.subtitles as { subtitle?: ISubtitleConfig[] }).subtitle || [];
               if (subtitleArray.length > 0) {
                 const assContent = subtitleEngine.generateASS(
                   subtitleArray,

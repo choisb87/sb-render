@@ -288,6 +288,12 @@ export class VideoComposer implements IVideoComposer {
         const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
         const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
 
+        // Check if audio stream is valid (has codec and channels)
+        const hasValidAudio = !!audioStream &&
+                             !!audioStream.codec_name &&
+                             audioStream.codec_name !== 'none' &&
+                             (audioStream.channels ?? 0) > 0;
+
         if (!videoStream) {
           // No video stream found, use defaults
           console.warn('No video stream found, using default metadata');
@@ -295,7 +301,7 @@ export class VideoComposer implements IVideoComposer {
             duration: 10,
             width: 1920,
             height: 1080,
-            hasAudio: !!audioStream,
+            hasAudio: hasValidAudio,
             videoCodec: 'unknown',
             audioCodec: audioStream?.codec_name,
           });
@@ -306,7 +312,7 @@ export class VideoComposer implements IVideoComposer {
           duration: metadata.format.duration || 10,
           width: videoStream.width || 1920,
           height: videoStream.height || 1080,
-          hasAudio: !!audioStream,
+          hasAudio: hasValidAudio,
           videoCodec: videoStream.codec_name || 'unknown',
           audioCodec: audioStream?.codec_name,
         });

@@ -1,5 +1,4 @@
 import { promises as fs } from 'fs';
-// import * as path from 'path'; // Unused
 import { file as tmpFile } from 'tmp-promise';
 import type { ISubtitleEngine, ISubtitleConfig } from '../interfaces';
 
@@ -89,6 +88,16 @@ ScaledBorderAndShadow: yes`;
   }
 
   /**
+   * Get font name for subtitle rendering
+   * Uses NanumGothic for Korean support
+   */
+  private getFontName(): string {
+    // Use NanumGothic font for Korean character support
+    // Font file will be loaded from fontsdir specified in VideoComposer
+    return 'NanumGothic';
+  }
+
+  /**
    * Generate ASS styles section
    */
   private generateASSStyles(subtitles: ISubtitleConfig[]): string {
@@ -96,6 +105,7 @@ ScaledBorderAndShadow: yes`;
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding`;
 
     const uniqueStyles = new Map<string, string>();
+    const fontName = this.getFontName();
 
     subtitles.forEach((subtitle, index) => {
       const styleName = `Style${index}`;
@@ -106,7 +116,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
       const alignment = this.getASSAlignment(subtitle.alignment, subtitle.position);
       const outline = subtitle.borderWidth || 2;
 
-      const styleDefinition = `Style: ${styleName},${subtitle.fontFamily},${subtitle.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,1,${outline},2,${alignment},10,10,10,1`;
+      const styleDefinition = `Style: ${styleName},${fontName},${subtitle.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,1,${outline},2,${alignment},10,10,10,1`;
 
       uniqueStyles.set(styleName, styleDefinition);
     });

@@ -139,23 +139,23 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
-    return new Promise(async (resolve, reject) => {
+    // Get video duration
+    const videoMetadata = await this.getVideoMetadata(videoPath);
+    const videoDuration = videoMetadata.duration;
+
+    // Get narration duration if exists
+    let narrationDuration = 0;
+    if (narrationPath) {
       try {
-        // Get video duration
-        const videoMetadata = await this.getVideoMetadata(videoPath);
-        const videoDuration = videoMetadata.duration;
+        const narrationMetadata = await this.getAudioDuration(narrationPath);
+        narrationDuration = narrationMetadata;
+      } catch (error) {
+        console.warn('Failed to get narration duration:', error);
+      }
+    }
 
-        // Get narration duration if exists
-        let narrationDuration = 0;
-        if (narrationPath) {
-          try {
-            const narrationMetadata = await this.getAudioDuration(narrationPath);
-            narrationDuration = narrationMetadata;
-          } catch (error) {
-            console.warn('Failed to get narration duration:', error);
-          }
-        }
-
+    return new Promise((resolve, reject) => {
+      try {
         const command = ffmpeg(videoPath);
 
         // Add BGM input

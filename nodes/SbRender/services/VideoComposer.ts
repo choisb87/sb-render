@@ -1,12 +1,30 @@
 import { promises as fs } from 'fs';
+import { dirname, join } from 'path';
+import { accessSync } from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../interfaces';
 
-// Set FFmpeg and FFprobe paths
+// Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-ffmpeg.setFfprobePath(ffprobeInstaller.path);
+
+// Set FFprobe path - try multiple sources
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
+  ffmpeg.setFfprobePath(ffprobeInstaller.path);
+} catch (error) {
+  // If @ffprobe-installer is not available, try to find ffprobe in the same directory as ffmpeg
+  const ffmpegDir = dirname(ffmpegInstaller.path);
+  const ffprobePath = join(ffmpegDir, 'ffprobe');
+  try {
+    accessSync(ffprobePath);
+    ffmpeg.setFfprobePath(ffprobePath);
+  } catch {
+    // ffprobe will need to be in system PATH
+    console.warn('ffprobe not found in package, will try system PATH');
+  }
+}
 
 /**
  * VideoComposer Service

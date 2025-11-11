@@ -240,7 +240,7 @@ export class VideoComposer implements IVideoComposer {
             duration: 10, // Default 10 seconds
             width: 1920,
             height: 1080,
-            hasAudio: true, // Assume audio exists
+            hasAudio: false, // Assume no audio to avoid stream errors
             videoCodec: 'unknown',
             audioCodec: undefined,
           });

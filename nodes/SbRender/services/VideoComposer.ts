@@ -1,10 +1,12 @@
 import { promises as fs } from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../interfaces';
 
-// Set FFmpeg path
+// Set FFmpeg and FFprobe paths
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 /**
  * VideoComposer Service

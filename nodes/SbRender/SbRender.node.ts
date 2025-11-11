@@ -20,6 +20,7 @@ import type {
   ISbRenderNodeParams,
   IAudioMixConfig,
   ISubtitleConfig,
+  IVideoMetadata,
 } from './interfaces';
 
 import { DEFAULTS as DEFAULT_VALUES } from './interfaces';
@@ -770,8 +771,22 @@ export class SbRender implements INodeType {
               itemIndex,
             );
 
-            // 2. Get video metadata
-            const metadata = await videoComposer.getVideoMetadata(videoPath);
+            // 2. Get video metadata (with fallback if ffprobe unavailable)
+            let metadata: IVideoMetadata;
+            try {
+              metadata = await videoComposer.getVideoMetadata(videoPath);
+            } catch (error) {
+              // If ffprobe is not available, use safe defaults
+              console.warn('Failed to get video metadata, using defaults:', error);
+              metadata = {
+                duration: 10,
+                width: 1920,
+                height: 1080,
+                hasAudio: false, // Assume no audio to avoid stream errors
+                videoCodec: 'unknown',
+                audioCodec: undefined,
+              };
+            }
 
             // 3. Download/extract BGM and narration if enabled
             let bgmPath: string | null = null;

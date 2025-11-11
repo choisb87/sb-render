@@ -857,6 +857,23 @@ export class SbRender implements INodeType {
             // 7. Return result with binary data
             const binaryPropertyName = params.outputBinaryProperty || 'data';
 
+            // Extract filename from video URL
+            let filename = `rendered.${params.outputFormat}`;
+            if (params.videoSource === 'url' && params.videoUrl) {
+              try {
+                const urlPath = new URL(params.videoUrl).pathname;
+                const originalFilename = urlPath.split('/').pop() || '';
+                if (originalFilename) {
+                  // Remove extension and add output format
+                  const nameWithoutExt = originalFilename.replace(/\.[^.]+$/, '');
+                  filename = `${nameWithoutExt}.${params.outputFormat}`;
+                }
+              } catch (error) {
+                // If URL parsing fails, use default filename
+                console.warn('Failed to extract filename from URL, using default:', error);
+              }
+            }
+
             const result: INodeExecutionData = {
               json: {
                 success: true,
@@ -867,7 +884,7 @@ export class SbRender implements INodeType {
               binary: {
                 [binaryPropertyName]: await this.helpers.prepareBinaryData(
                   videoBuffer,
-                  `rendered.${params.outputFormat}`,
+                  filename,
                   `video/${params.outputFormat}`,
                 ),
               },

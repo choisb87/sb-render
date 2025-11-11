@@ -251,9 +251,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
   private getMarginV(position: string, videoHeight: number): number {
     if (position === 'top') return 50;
     if (position === 'middle') return Math.round(videoHeight / 2);
-    if (position === 'bottom') return 200;
+    if (position === 'bottom') return 50;
 
-    return 200; // default bottom
+    return 50; // default bottom
   }
 
   /**

@@ -126,9 +126,51 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
   }
 
   /**
+   * Wrap text based on character count per line
+   * Automatically breaks long text into multiple lines
+   */
+  private wrapText(text: string, fontSize: number, videoWidth: number): string {
+    // Calculate max characters per line based on font size and video width
+    // Approximate: larger font = fewer characters per line
+    const baseCharsPerLine = 40; // Base for fontSize 56 at 1920px width
+    const scaleFactor = (1920 / videoWidth) * (56 / fontSize);
+    const maxCharsPerLine = Math.floor(baseCharsPerLine * scaleFactor);
+
+    // Split by existing newlines first
+    const paragraphs = text.split(/\\n|\n/);
+    const wrappedParagraphs: string[] = [];
+
+    paragraphs.forEach(paragraph => {
+      if (paragraph.length <= maxCharsPerLine) {
+        wrappedParagraphs.push(paragraph);
+        return;
+      }
+
+      // Word wrap for long paragraphs
+      const words = paragraph.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+
+      words.forEach(word => {
+        if ((currentLine + ' ' + word).trim().length <= maxCharsPerLine) {
+          currentLine = currentLine ? currentLine + ' ' + word : word;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
+        }
+      });
+
+      if (currentLine) lines.push(currentLine);
+      wrappedParagraphs.push(lines.join('\\N'));
+    });
+
+    return wrappedParagraphs.join('\\N');
+  }
+
+  /**
    * Generate ASS events section
    */
-  private generateASSEvents(subtitles: ISubtitleConfig[], _videoWidth: number, videoHeight: number): string {
+  private generateASSEvents(subtitles: ISubtitleConfig[], videoWidth: number, videoHeight: number): string {
     const eventsHeader = `[Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
@@ -139,6 +181,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
       const endTime = this.formatASSTime(subtitle.endTime);
       const styleName = `Style${index}`;
 
+      // Wrap text for better readability
+      const wrappedText = this.wrapText(subtitle.text, subtitle.fontSize, videoWidth);
+
       // Calculate position override if custom position
       let positionTag = '';
       if (subtitle.position === 'custom' && subtitle.customX !== undefined && subtitle.customY !== undefined) {
@@ -147,13 +192,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
         // Use margin-based positioning
         const marginV = this.getMarginV(subtitle.position, subtitle.customY, videoHeight);
         eventLines.push(
-          `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,${marginV},,${positionTag}${subtitle.text}`,
+          `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,${marginV},,${positionTag}${wrappedText}`,
         );
         return;
       }
 
       eventLines.push(
-        `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,0,,${positionTag}${subtitle.text}`,
+        `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,0,,${positionTag}${wrappedText}`,
       );
     });
 

@@ -26,7 +26,7 @@ export class AudioMixer implements IAudioMixer {
   getAudioFilterChain(config: IAudioMixConfig, hasOriginalAudio: boolean): string {
     const filters: string[] = [];
     const inputs: string[] = [];
-    let inputIndex = hasOriginalAudio ? 1 : 0; // 0 is video, skip if no audio
+    let inputIndex = 1; // Start from 1 (0 is video, 1 is first audio input)
 
     // Handle original video audio
     if (hasOriginalAudio) {

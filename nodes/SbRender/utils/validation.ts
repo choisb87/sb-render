@@ -210,8 +210,8 @@ export function validateParams(params: ISbRenderNodeParams): void {
   validateBGMConfig(params);
   validateNarrationConfig(params);
 
-  if (params.enableSubtitles && params.subtitles) {
-    validateSubtitles(params.subtitles);
+  if (params.enableSubtitles && params.subtitles?.subtitle) {
+    validateSubtitles(params.subtitles.subtitle);
   }
 
   validateOutputConfig(params);

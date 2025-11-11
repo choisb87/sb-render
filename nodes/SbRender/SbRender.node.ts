@@ -723,8 +723,34 @@ export class SbRender implements INodeType {
           const operation = this.getNodeParameter('operation', itemIndex) as string;
 
           if (resource === 'Video' && operation === 'Render') {
-            // Get all parameters
-            const params = this.getNodeParameter('*', itemIndex) as unknown as ISbRenderNodeParams;
+            // Get all parameters individually
+            const params: ISbRenderNodeParams = {
+              resource: 'Video',
+              operation: 'Render',
+              videoSource: this.getNodeParameter('videoSource', itemIndex) as 'url' | 'binary',
+              videoUrl: this.getNodeParameter('videoUrl', itemIndex, '') as string,
+              videoBinaryProperty: this.getNodeParameter('videoBinaryProperty', itemIndex, 'data') as string,
+              enableBGM: this.getNodeParameter('enableBGM', itemIndex, false) as boolean,
+              bgmSource: this.getNodeParameter('bgmSource', itemIndex, 'url') as 'url' | 'binary',
+              bgmUrl: this.getNodeParameter('bgmUrl', itemIndex, '') as string,
+              bgmBinaryProperty: this.getNodeParameter('bgmBinaryProperty', itemIndex, 'data') as string,
+              bgmVolume: this.getNodeParameter('bgmVolume', itemIndex, DEFAULT_VALUES.bgmVolume) as number,
+              bgmFadeIn: this.getNodeParameter('bgmFadeIn', itemIndex, DEFAULT_VALUES.bgmFadeIn) as number,
+              bgmFadeOut: this.getNodeParameter('bgmFadeOut', itemIndex, DEFAULT_VALUES.bgmFadeOut) as number,
+              enableNarration: this.getNodeParameter('enableNarration', itemIndex, false) as boolean,
+              narrationSource: this.getNodeParameter('narrationSource', itemIndex, 'url') as 'url' | 'binary',
+              narrationUrl: this.getNodeParameter('narrationUrl', itemIndex, '') as string,
+              narrationBinaryProperty: this.getNodeParameter('narrationBinaryProperty', itemIndex, 'data') as string,
+              narrationVolume: this.getNodeParameter('narrationVolume', itemIndex, DEFAULT_VALUES.narrationVolume) as number,
+              narrationDelay: this.getNodeParameter('narrationDelay', itemIndex, DEFAULT_VALUES.narrationDelay) as number,
+              enableSubtitles: this.getNodeParameter('enableSubtitles', itemIndex, false) as boolean,
+              subtitles: this.getNodeParameter('subtitles', itemIndex, {} as { subtitle?: ISubtitleConfig[] }) as { subtitle?: ISubtitleConfig[] },
+              outputFormat: this.getNodeParameter('outputFormat', itemIndex, DEFAULT_VALUES.outputFormat) as 'mp4' | 'mov' | 'webm',
+              videoCodec: this.getNodeParameter('videoCodec', itemIndex, DEFAULT_VALUES.videoCodec) as 'libx264' | 'libx265' | 'vp9',
+              quality: this.getNodeParameter('quality', itemIndex, DEFAULT_VALUES.quality) as 'low' | 'medium' | 'high' | 'custom',
+              customCRF: this.getNodeParameter('customCRF', itemIndex, 18) as number,
+              outputBinaryProperty: this.getNodeParameter('outputBinaryProperty', itemIndex, DEFAULT_VALUES.outputBinaryProperty) as string,
+            };
 
             // Validate parameters
             try {
@@ -788,8 +814,8 @@ export class SbRender implements INodeType {
 
             // 5. Generate subtitles if enabled
             let subtitlePath: string | null = null;
-            if (params.enableSubtitles && params.subtitles) {
-              const subtitleArray = (params.subtitles as { subtitle?: ISubtitleConfig[] }).subtitle || [];
+            if (params.enableSubtitles && params.subtitles?.subtitle) {
+              const subtitleArray = params.subtitles.subtitle;
               if (subtitleArray.length > 0) {
                 const assContent = subtitleEngine.generateASS(
                   subtitleArray,

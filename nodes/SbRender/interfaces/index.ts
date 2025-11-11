@@ -34,7 +34,7 @@ export interface ISbRenderNodeParams {
 
   // Subtitle Configuration
   enableSubtitles: boolean;
-  subtitles?: ISubtitleConfig[];
+  subtitles?: { subtitle?: ISubtitleConfig[] };
 
   // Output Configuration
   outputFormat: 'mp4' | 'mov' | 'webm';

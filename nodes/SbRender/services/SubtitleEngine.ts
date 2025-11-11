@@ -184,22 +184,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
       // Wrap text for better readability
       const wrappedText = this.wrapText(subtitle.text, subtitle.fontSize, videoWidth);
 
-      // Calculate position override if custom position
+      // Only use custom position if position is 'custom'
+      // For bottom/top/middle, always use margin-based positioning (ignore customX/customY)
       let positionTag = '';
       if (subtitle.position === 'custom' && subtitle.customX !== undefined && subtitle.customY !== undefined) {
         positionTag = `{\\pos(${subtitle.customX},${subtitle.customY})}`;
-      } else {
-        // Use margin-based positioning
-        const marginV = this.getMarginV(subtitle.position, subtitle.customY, videoHeight);
         eventLines.push(
-          `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,${marginV},,${positionTag}${wrappedText}`,
+          `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,0,,${positionTag}${wrappedText}`,
         );
-        return;
+      } else {
+        // Use margin-based positioning for bottom/top/middle
+        const marginV = this.getMarginV(subtitle.position, videoHeight);
+        eventLines.push(
+          `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,${marginV},,${wrappedText}`,
+        );
       }
-
-      eventLines.push(
-        `Dialogue: 0,${startTime},${endTime},${styleName},,0,0,0,,${positionTag}${wrappedText}`,
-      );
     });
 
     return `${eventsHeader}\n${eventLines.join('\n')}`;
@@ -247,15 +246,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
   /**
    * Calculate vertical margin based on position
+   * customX/customY are ignored for bottom/top/middle positions
    */
-  private getMarginV(position: string, customY: number | undefined, videoHeight: number): number {
-    if (customY !== undefined) return customY;
-
+  private getMarginV(position: string, videoHeight: number): number {
     if (position === 'top') return 50;
     if (position === 'middle') return Math.round(videoHeight / 2);
-    if (position === 'bottom') return 100;
+    if (position === 'bottom') return 40;
 
-    return 100; // default bottom
+    return 40; // default bottom
   }
 
   /**

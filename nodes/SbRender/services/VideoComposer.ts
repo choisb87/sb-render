@@ -139,8 +139,23 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
+        // Get video duration
+        const videoMetadata = await this.getVideoMetadata(videoPath);
+        const videoDuration = videoMetadata.duration;
+
+        // Get narration duration if exists
+        let narrationDuration = 0;
+        if (narrationPath) {
+          try {
+            const narrationMetadata = await this.getAudioDuration(narrationPath);
+            narrationDuration = narrationMetadata;
+          } catch (error) {
+            console.warn('Failed to get narration duration:', error);
+          }
+        }
+
         const command = ffmpeg(videoPath);
 
         // Add BGM input
@@ -160,6 +175,12 @@ export class VideoComposer implements IVideoComposer {
 
         // Video filters
         const videoFilters: string[] = [];
+
+        // If narration is longer than video, freeze last frame
+        if (narrationDuration > videoDuration) {
+          const freezeDuration = narrationDuration - videoDuration;
+          videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration}`);
+        }
 
         // Add subtitle overlay if present
         if (subtitlePath) {
@@ -223,6 +244,23 @@ export class VideoComposer implements IVideoComposer {
       } catch (error) {
         reject(new Error(`Video composition failed: ${error}`));
       }
+    });
+  }
+
+  /**
+   * Get audio file duration
+   */
+  async getAudioDuration(audioPath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(audioPath, (error, metadata) => {
+        if (error) {
+          reject(new Error(`Failed to get audio duration: ${error.message}`));
+          return;
+        }
+
+        const duration = metadata.format.duration || 0;
+        resolve(duration);
+      });
     });
   }
 

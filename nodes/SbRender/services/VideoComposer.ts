@@ -358,6 +358,20 @@ export class VideoComposer implements IVideoComposer {
       return buffer;
     }
 
+    // Check if videos have audio streams
+    const hasAudio = await Promise.all(
+      videoPaths.map(async (videoPath) => {
+        try {
+          const metadata = await this.getVideoMetadata(videoPath);
+          return metadata.hasAudio;
+        } catch {
+          return false;
+        }
+      })
+    );
+
+    const allHaveAudio = hasAudio.every(has => has);
+
     return new Promise((resolve, reject) => {
       try {
         const command = ffmpeg();
@@ -367,17 +381,31 @@ export class VideoComposer implements IVideoComposer {
           command.input(videoPath);
         });
 
-        // Create concat filter
-        const filterString = videoPaths.map((_, index) => `[${index}:v:0][${index}:a:0?]`).join('') +
-                           `concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
+        // Create concat filter based on audio availability
+        let filterString: string;
+        if (allHaveAudio) {
+          // All videos have audio - use normal concat
+          filterString = videoPaths.map((_, index) => `[${index}:v][${index}:a]`).join('') +
+                        `concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
+        } else {
+          // Some videos don't have audio - video only concat
+          filterString = videoPaths.map((_, index) => `[${index}:v]`).join('') +
+                        `concat=n=${videoPaths.length}:v=1:a=0[outv]`;
+        }
 
         command.complexFilter(filterString);
 
         // Map output streams
-        command.outputOptions([
-          '-map [outv]',
-          '-map [outa]',
-        ]);
+        if (allHaveAudio) {
+          command.outputOptions([
+            '-map [outv]',
+            '-map [outa]',
+          ]);
+        } else {
+          command.outputOptions([
+            '-map [outv]',
+          ]);
+        }
 
         // Set output codec and quality
         const crf = this.getCRF(quality, customCRF);
@@ -388,9 +416,16 @@ export class VideoComposer implements IVideoComposer {
             `-crf ${crf}`,
             '-preset medium',
             '-movflags +faststart',
-          ])
-          .audioCodec('aac')
-          .audioBitrate('192k')
+          ]);
+
+        // Add audio codec only if videos have audio
+        if (allHaveAudio) {
+          command
+            .audioCodec('aac')
+            .audioBitrate('192k');
+        }
+
+        command
           .format(outputFormat)
           .output(outputPath);
 

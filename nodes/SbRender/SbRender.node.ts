@@ -77,6 +77,12 @@ export class SbRender implements INodeType {
             description: 'Compose video with audio and subtitles',
             action: 'Render video',
           },
+          {
+            name: 'Merge',
+            value: 'Merge',
+            description: 'Merge multiple videos in sequence',
+            action: 'Merge videos',
+          },
         ],
         default: 'Render',
       },
@@ -672,6 +678,162 @@ export class SbRender implements INodeType {
         default: 'data',
         description: 'Name of the binary property to store the rendered video',
       },
+
+      // === MERGE OPERATION SECTION ===
+      {
+        displayName: 'Video URLs',
+        name: 'videoUrls',
+        type: 'string',
+        typeOptions: {
+          multipleValues: true,
+        },
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+          },
+        },
+        default: [],
+        placeholder: 'https://example.com/video1.mp4',
+        required: true,
+        description: 'URLs of videos to merge in sequence',
+      },
+
+      {
+        displayName: 'Output Filename',
+        name: 'outputFilename',
+        type: 'string',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+          },
+        },
+        default: 'merged-video.mp4',
+        placeholder: 'merged-video.mp4',
+        description: 'Filename for the merged video output',
+      },
+
+      {
+        displayName: 'Output Format',
+        name: 'mergeOutputFormat',
+        type: 'options',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+          },
+        },
+        options: [
+          {
+            name: 'MP4',
+            value: 'mp4',
+          },
+          {
+            name: 'MOV',
+            value: 'mov',
+          },
+          {
+            name: 'WebM',
+            value: 'webm',
+          },
+        ],
+        default: 'mp4',
+        description: 'Output video format',
+      },
+
+      {
+        displayName: 'Video Codec',
+        name: 'mergeVideoCodec',
+        type: 'options',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+          },
+        },
+        options: [
+          {
+            name: 'H.264 (Libx264)',
+            value: 'libx264',
+          },
+          {
+            name: 'H.265 (Libx265)',
+            value: 'libx265',
+          },
+          {
+            name: 'VP9',
+            value: 'vp9',
+          },
+        ],
+        default: 'libx264',
+        description: 'Video codec for encoding',
+      },
+
+      {
+        displayName: 'Quality',
+        name: 'mergeQuality',
+        type: 'options',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+          },
+        },
+        options: [
+          {
+            name: 'Low',
+            value: 'low',
+          },
+          {
+            name: 'Medium',
+            value: 'medium',
+          },
+          {
+            name: 'High',
+            value: 'high',
+          },
+          {
+            name: 'Custom',
+            value: 'custom',
+          },
+        ],
+        default: 'high',
+        description: 'Output quality preset',
+      },
+
+      {
+        displayName: 'Custom CRF',
+        name: 'mergeCustomCRF',
+        type: 'number',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+            mergeQuality: ['custom'],
+          },
+        },
+        typeOptions: {
+          minValue: 0,
+          maxValue: 51,
+        },
+        default: 18,
+        description: 'Custom CRF value (0-51, lower is better quality)',
+      },
+
+      {
+        displayName: 'Output Binary Property',
+        name: 'mergeOutputBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Merge'],
+          },
+        },
+        default: 'data',
+        description: 'Name of the binary property to store the merged video',
+      },
     ],
   };
 
@@ -765,7 +927,7 @@ export class SbRender implements INodeType {
 
             // 1. Download/extract video
             const videoPath = await getMediaFile(
-              params.videoSource,
+              params.videoSource || 'url',
               params.videoUrl,
               params.videoBinaryProperty,
               itemIndex,
@@ -886,6 +1048,57 @@ export class SbRender implements INodeType {
                   videoBuffer,
                   filename,
                   `video/${params.outputFormat}`,
+                ),
+              },
+              pairedItem: itemIndex,
+            };
+
+            returnData.push(result);
+          } else if (resource === 'Video' && operation === 'Merge') {
+            // Get merge parameters
+            const videoUrls = this.getNodeParameter('videoUrls', itemIndex, []) as string[];
+            const outputFilename = this.getNodeParameter('outputFilename', itemIndex, 'merged-video.mp4') as string;
+            const mergeOutputFormat = this.getNodeParameter('mergeOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
+            const mergeVideoCodec = this.getNodeParameter('mergeVideoCodec', itemIndex, 'libx264') as 'libx264' | 'libx265' | 'vp9';
+            const mergeQuality = this.getNodeParameter('mergeQuality', itemIndex, 'high') as 'low' | 'medium' | 'high' | 'custom';
+            const mergeCustomCRF = this.getNodeParameter('mergeCustomCRF', itemIndex, 18) as number;
+            const mergeOutputBinaryProperty = this.getNodeParameter('mergeOutputBinaryProperty', itemIndex, 'data') as string;
+
+            if (!videoUrls || videoUrls.length === 0) {
+              throw new NodeOperationError(this.getNode(), 'No video URLs provided for merging', { itemIndex });
+            }
+
+            // Download all videos
+            const videoPaths: string[] = [];
+            for (const videoUrl of videoUrls) {
+              const videoPath = await fileManager.downloadFile(videoUrl);
+              videoPaths.push(videoPath);
+            }
+
+            // Create output path
+            const outputPath = await fileManager.createTempFile(`.${mergeOutputFormat}`);
+
+            // Merge videos
+            const videoBuffer = await videoComposer.mergeVideos(
+              videoPaths,
+              outputPath,
+              mergeVideoCodec,
+              mergeQuality,
+              mergeCustomCRF,
+              mergeOutputFormat,
+            );
+
+            // Return result with binary data
+            const result: INodeExecutionData = {
+              json: {
+                success: true,
+                videoCount: videoUrls.length,
+              },
+              binary: {
+                [mergeOutputBinaryProperty]: await this.helpers.prepareBinaryData(
+                  videoBuffer,
+                  outputFilename,
+                  `video/${mergeOutputFormat}`,
                 ),
               },
               pairedItem: itemIndex,

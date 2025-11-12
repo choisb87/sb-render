@@ -173,17 +173,17 @@ export function validateSubtitles(subtitles: ISubtitleConfig[]): void {
  */
 export function validateOutputConfig(params: ISbRenderNodeParams): void {
   const validFormats = ['mp4', 'mov', 'webm'];
-  if (!validFormats.includes(params.outputFormat)) {
+  if (params.outputFormat && !validFormats.includes(params.outputFormat)) {
     throw new ValidationError(`Invalid output format: ${params.outputFormat}. Must be one of: ${validFormats.join(', ')}`);
   }
 
   const validCodecs = ['libx264', 'libx265', 'vp9'];
-  if (!validCodecs.includes(params.videoCodec)) {
+  if (params.videoCodec && !validCodecs.includes(params.videoCodec)) {
     throw new ValidationError(`Invalid video codec: ${params.videoCodec}. Must be one of: ${validCodecs.join(', ')}`);
   }
 
   const validQualities = ['low', 'medium', 'high', 'custom'];
-  if (!validQualities.includes(params.quality)) {
+  if (params.quality && !validQualities.includes(params.quality)) {
     throw new ValidationError(`Invalid quality setting: ${params.quality}. Must be one of: ${validQualities.join(', ')}`);
   }
 

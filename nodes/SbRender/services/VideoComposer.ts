@@ -69,10 +69,10 @@ export class VideoComposer implements IVideoComposer {
         }
 
         // Set output codec and quality
-        const crf = this.getCRF(config.quality, config.customCRF);
+        const crf = this.getCRF(config.quality || 'high', config.customCRF);
 
         command
-          .videoCodec(config.videoCodec)
+          .videoCodec(config.videoCodec || 'libx264')
           .outputOptions([
             `-crf ${crf}`,
             '-preset medium',
@@ -89,7 +89,7 @@ export class VideoComposer implements IVideoComposer {
         }
 
         // Set output format
-        command.format(config.outputFormat);
+        command.format(config.outputFormat || 'mp4');
 
         // Save to output path
         command.output(outputPath);
@@ -202,10 +202,10 @@ export class VideoComposer implements IVideoComposer {
         ].filter(Boolean));
 
         // Set output codec and quality
-        const crf = this.getCRF(config.quality, config.customCRF);
+        const crf = this.getCRF(config.quality || 'high', config.customCRF);
 
         command
-          .videoCodec(config.videoCodec)
+          .videoCodec(config.videoCodec || 'libx264')
           .outputOptions([
             `-crf ${crf}`,
             '-preset medium',
@@ -213,7 +213,7 @@ export class VideoComposer implements IVideoComposer {
           ])
           .audioCodec('aac')
           .audioBitrate('192k')
-          .format(config.outputFormat)
+          .format(config.outputFormat || 'mp4')
           .output(outputPath);
 
         // Handle events
@@ -338,16 +338,104 @@ export class VideoComposer implements IVideoComposer {
   }
 
   /**
+   * Merge multiple videos in sequence
+   */
+  async mergeVideos(
+    videoPaths: string[],
+    outputPath: string,
+    videoCodec = 'libx264',
+    quality = 'high',
+    customCRF?: number,
+    outputFormat = 'mp4',
+  ): Promise<Buffer> {
+    if (videoPaths.length === 0) {
+      throw new Error('No videos provided for merging');
+    }
+
+    if (videoPaths.length === 1) {
+      // Only one video, just copy it
+      const buffer = await fs.readFile(videoPaths[0]);
+      return buffer;
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        const command = ffmpeg();
+
+        // Add all video inputs
+        videoPaths.forEach(videoPath => {
+          command.input(videoPath);
+        });
+
+        // Create concat filter
+        const filterString = videoPaths.map((_, index) => `[${index}:v:0][${index}:a:0?]`).join('') +
+                           `concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
+
+        command.complexFilter(filterString);
+
+        // Map output streams
+        command.outputOptions([
+          '-map [outv]',
+          '-map [outa]',
+        ]);
+
+        // Set output codec and quality
+        const crf = this.getCRF(quality, customCRF);
+
+        command
+          .videoCodec(videoCodec)
+          .outputOptions([
+            `-crf ${crf}`,
+            '-preset medium',
+            '-movflags +faststart',
+          ])
+          .audioCodec('aac')
+          .audioBitrate('192k')
+          .format(outputFormat)
+          .output(outputPath);
+
+        // Handle events
+        command.on('start', (commandLine: string) => {
+          console.log('FFmpeg merge command:', commandLine);
+        });
+
+        command.on('progress', (progress: { percent?: number }) => {
+          if (progress.percent) {
+            console.log(`Merging: ${Math.round(progress.percent)}% done`);
+          }
+        });
+
+        command.on('end', async () => {
+          try {
+            const buffer = await fs.readFile(outputPath);
+            resolve(buffer);
+          } catch (error) {
+            reject(new Error(`Failed to read merged output file: ${error}`));
+          }
+        });
+
+        command.on('error', (error: Error) => {
+          reject(new Error(`FFmpeg merge error: ${error.message}`));
+        });
+
+        command.run();
+      } catch (error) {
+        reject(new Error(`Video merge failed: ${error}`));
+      }
+    });
+  }
+
+  /**
    * Validate output configuration
    */
   validateConfig(config: ISbRenderNodeParams): void {
     const validFormats = ['mp4', 'mov', 'webm'];
-    if (!validFormats.includes(config.outputFormat)) {
+    if (config.outputFormat && !validFormats.includes(config.outputFormat)) {
       throw new Error(`Invalid output format: ${config.outputFormat}`);
     }
 
     const validCodecs = ['libx264', 'libx265', 'vp9'];
-    if (!validCodecs.includes(config.videoCodec)) {
+    if (config.videoCodec && !validCodecs.includes(config.videoCodec)) {
       throw new Error(`Invalid video codec: ${config.videoCodec}`);
     }
 

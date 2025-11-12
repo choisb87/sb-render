@@ -8,15 +8,19 @@
 
 export interface ISbRenderNodeParams {
   resource: 'Video';
-  operation: 'Render';
+  operation: 'Render' | 'Merge';
 
-  // Video Input
-  videoSource: 'url' | 'binary';
+  // Video Input (for Render operation)
+  videoSource?: 'url' | 'binary';
   videoUrl?: string;
   videoBinaryProperty?: string;
 
+  // Video URLs (for Merge operation)
+  videoUrls?: string[];
+  outputFilename?: string;
+
   // BGM Input (Optional)
-  enableBGM: boolean;
+  enableBGM?: boolean;
   bgmSource?: 'url' | 'binary';
   bgmUrl?: string;
   bgmBinaryProperty?: string;
@@ -25,7 +29,7 @@ export interface ISbRenderNodeParams {
   bgmFadeOut?: number;
 
   // Narration Input (Optional)
-  enableNarration: boolean;
+  enableNarration?: boolean;
   narrationSource?: 'url' | 'binary';
   narrationUrl?: string;
   narrationBinaryProperty?: string;
@@ -33,15 +37,22 @@ export interface ISbRenderNodeParams {
   narrationDelay?: number;
 
   // Subtitle Configuration
-  enableSubtitles: boolean;
+  enableSubtitles?: boolean;
   subtitles?: { subtitle?: ISubtitleConfig[] };
 
-  // Output Configuration
-  outputFormat: 'mp4' | 'mov' | 'webm';
-  videoCodec: 'libx264' | 'libx265' | 'vp9';
-  quality: 'low' | 'medium' | 'high' | 'custom';
+  // Output Configuration (for Render operation)
+  outputFormat?: 'mp4' | 'mov' | 'webm';
+  videoCodec?: 'libx264' | 'libx265' | 'vp9';
+  quality?: 'low' | 'medium' | 'high' | 'custom';
   customCRF?: number;
-  outputBinaryProperty: string;
+  outputBinaryProperty?: string;
+
+  // Output Configuration (for Merge operation)
+  mergeOutputFormat?: 'mp4' | 'mov' | 'webm';
+  mergeVideoCodec?: 'libx264' | 'libx265' | 'vp9';
+  mergeQuality?: 'low' | 'medium' | 'high' | 'custom';
+  mergeCustomCRF?: number;
+  mergeOutputBinaryProperty?: string;
 }
 
 // ============================================================================

@@ -178,7 +178,8 @@ export class VideoComposer implements IVideoComposer {
 
         // Half frame rate if enabled (doubles duration)
         if (config.halfFrameRate) {
-          videoFilters.push('setpts=2*PTS');
+          // Slow down video by doubling PTS and maintaining consistent frame timing
+          videoFilters.push('setpts=2.0*PTS');
         }
 
         // If narration is longer than video, freeze last frame
@@ -209,13 +210,20 @@ export class VideoComposer implements IVideoComposer {
         // Set output codec and quality
         const crf = this.getCRF(config.quality || 'high', config.customCRF);
 
+        const outputOptions = [
+          `-crf ${crf}`,
+          '-preset medium',
+          '-movflags +faststart',
+        ];
+
+        // Add explicit frame rate for half frame rate mode to ensure proper playback
+        if (config.halfFrameRate) {
+          outputOptions.push('-r 24');
+        }
+
         command
           .videoCodec(config.videoCodec || 'libx264')
-          .outputOptions([
-            `-crf ${crf}`,
-            '-preset medium',
-            '-movflags +faststart',
-          ])
+          .outputOptions(outputOptions)
           .audioCodec('aac')
           .audioBitrate('192k')
           .format(config.outputFormat || 'mp4')

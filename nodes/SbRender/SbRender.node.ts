@@ -1079,21 +1079,29 @@ export class SbRender implements INodeType {
             const mergeCustomCRF = this.getNodeParameter('mergeCustomCRF', itemIndex, 18) as number;
             const mergeOutputBinaryProperty = this.getNodeParameter('mergeOutputBinaryProperty', itemIndex, 'data') as string;
 
+            console.log(`[SB Render] Merge operation starting with ${videoUrls.length} videos`);
+
             if (!videoUrls || videoUrls.length === 0) {
               throw new NodeOperationError(this.getNode(), 'No video URLs provided for merging', { itemIndex });
             }
 
             // Download all videos
+            console.log('[SB Render] Downloading videos...');
             const videoPaths: string[] = [];
-            for (const videoUrl of videoUrls) {
+            for (let i = 0; i < videoUrls.length; i++) {
+              const videoUrl = videoUrls[i];
+              console.log(`[SB Render] Downloading video ${i + 1}/${videoUrls.length}: ${videoUrl}`);
               const videoPath = await fileManager.downloadFile(videoUrl);
               videoPaths.push(videoPath);
+              console.log(`[SB Render] Downloaded to: ${videoPath}`);
             }
 
             // Create output path
             const outputPath = await fileManager.createTempFile(`.${mergeOutputFormat}`);
+            console.log(`[SB Render] Output path: ${outputPath}`);
 
             // Merge videos
+            console.log('[SB Render] Starting merge...');
             const videoBuffer = await videoComposer.mergeVideos(
               videoPaths,
               outputPath,
@@ -1102,12 +1110,15 @@ export class SbRender implements INodeType {
               mergeCustomCRF,
               mergeOutputFormat,
             );
+            console.log(`[SB Render] Merge completed, buffer size: ${videoBuffer.length} bytes`);
 
             // Return result with binary data
             const result: INodeExecutionData = {
               json: {
                 success: true,
                 videoCount: videoUrls.length,
+                outputSize: videoBuffer.length,
+                outputFilename: outputFilename,
               },
               binary: {
                 [mergeOutputBinaryProperty]: await this.helpers.prepareBinaryData(
@@ -1119,7 +1130,9 @@ export class SbRender implements INodeType {
               pairedItem: itemIndex,
             };
 
+            console.log('[SB Render] Pushing result to returnData');
             returnData.push(result);
+            console.log(`[SB Render] ReturnData length: ${returnData.length}`);
           }
         } catch (error) {
           if (this.continueOnFail()) {

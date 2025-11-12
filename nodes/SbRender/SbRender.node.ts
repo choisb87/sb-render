@@ -896,8 +896,10 @@ export class SbRender implements INodeType {
     try {
       for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
         try {
-          const resource = this.getNodeParameter('resource', itemIndex) as string;
+          const resource = this.getNodeParameter('resource', itemIndex, 'Video') as string;
           const operation = this.getNodeParameter('operation', itemIndex) as string;
+
+          console.log(`[SB Render] Processing item ${itemIndex}: resource=${resource}, operation=${operation}`);
 
           if (resource === 'Video' && operation === 'Render') {
             // Get all parameters individually

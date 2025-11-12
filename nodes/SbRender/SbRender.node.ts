@@ -666,6 +666,20 @@ export class SbRender implements INodeType {
       },
 
       {
+        displayName: 'Half Frame Rate (2x Duration)',
+        name: 'halfFrameRate',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+          },
+        },
+        default: false,
+        description: 'Whether to reduce frame rate by half to double the video duration (slow motion effect)',
+      },
+
+      {
         displayName: 'Output Binary Property',
         name: 'outputBinaryProperty',
         type: 'string',
@@ -912,6 +926,7 @@ export class SbRender implements INodeType {
               videoCodec: this.getNodeParameter('videoCodec', itemIndex, DEFAULT_VALUES.videoCodec) as 'libx264' | 'libx265' | 'vp9',
               quality: this.getNodeParameter('quality', itemIndex, DEFAULT_VALUES.quality) as 'low' | 'medium' | 'high' | 'custom',
               customCRF: this.getNodeParameter('customCRF', itemIndex, 18) as number,
+              halfFrameRate: this.getNodeParameter('halfFrameRate', itemIndex, false) as boolean,
               outputBinaryProperty: this.getNodeParameter('outputBinaryProperty', itemIndex, DEFAULT_VALUES.outputBinaryProperty) as string,
             };
 

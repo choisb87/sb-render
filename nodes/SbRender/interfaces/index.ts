@@ -45,6 +45,7 @@ export interface ISbRenderNodeParams {
   videoCodec?: 'libx264' | 'libx265' | 'vp9';
   quality?: 'low' | 'medium' | 'high' | 'custom';
   customCRF?: number;
+  halfFrameRate?: boolean;
   outputBinaryProperty?: string;
 
   // Output Configuration (for Merge operation)

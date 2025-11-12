@@ -176,6 +176,11 @@ export class VideoComposer implements IVideoComposer {
         // Video filters
         const videoFilters: string[] = [];
 
+        // Half frame rate if enabled (doubles duration)
+        if (config.halfFrameRate) {
+          videoFilters.push('setpts=2*PTS');
+        }
+
         // If narration is longer than video, freeze last frame
         if (narrationDuration > videoDuration) {
           const freezeDuration = narrationDuration - videoDuration;

@@ -41,7 +41,8 @@ export class AudioMixer implements IAudioMixer {
       const fadeOut = config.bgmFadeOut;
       const fadeOutStart = Math.max(0, config.videoDuration - fadeOut);
 
-      let bgmFilter = `[${inputIndex}:a]volume=${bgmVolume}`;
+      // Trim or loop BGM to match video duration, then apply volume and fades
+      let bgmFilter = `[${inputIndex}:a]aloop=loop=-1:size=2e+09,atrim=end=${config.videoDuration},volume=${bgmVolume}`;
 
       // Add fade in effect
       if (fadeIn > 0) {
@@ -87,10 +88,10 @@ export class AudioMixer implements IAudioMixer {
       const singleInput = inputs[0];
       filters.push(`${singleInput}acopy[mixed]`);
     } else {
-      // Mix multiple audio sources
+      // Mix multiple audio sources (BGM is already trimmed to video duration)
       const mixInputs = inputs.join('');
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=first:dropout_transition=2,dynaudnorm[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=shortest:dropout_transition=2,dynaudnorm[mixed]`,
       );
     }
 

@@ -703,7 +703,6 @@ export class SbRender implements INodeType {
         },
         displayOptions: {
           show: {
-            resource: ['Video'],
             operation: ['Merge'],
           },
         },
@@ -719,7 +718,6 @@ export class SbRender implements INodeType {
         type: 'string',
         displayOptions: {
           show: {
-            resource: ['Video'],
             operation: ['Merge'],
           },
         },
@@ -734,7 +732,6 @@ export class SbRender implements INodeType {
         type: 'options',
         displayOptions: {
           show: {
-            resource: ['Video'],
             operation: ['Merge'],
           },
         },
@@ -762,7 +759,6 @@ export class SbRender implements INodeType {
         type: 'options',
         displayOptions: {
           show: {
-            resource: ['Video'],
             operation: ['Merge'],
           },
         },
@@ -790,7 +786,6 @@ export class SbRender implements INodeType {
         type: 'options',
         displayOptions: {
           show: {
-            resource: ['Video'],
             operation: ['Merge'],
           },
         },
@@ -841,7 +836,6 @@ export class SbRender implements INodeType {
         type: 'string',
         displayOptions: {
           show: {
-            resource: ['Video'],
             operation: ['Merge'],
           },
         },

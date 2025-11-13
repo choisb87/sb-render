@@ -701,9 +701,9 @@ export class SbRender implements INodeType {
 
       // === MERGE OPERATION SECTION ===
       {
-        displayName: 'Video URLs',
-        name: 'videoUrls',
-        type: 'string',
+        displayName: 'Media Items',
+        name: 'mediaItems',
+        type: 'fixedCollection',
         typeOptions: {
           multipleValues: true,
         },
@@ -712,10 +712,58 @@ export class SbRender implements INodeType {
             operation: ['Merge'],
           },
         },
-        default: [],
-        placeholder: 'https://example.com/video1.mp4',
-        required: true,
-        description: 'URLs of videos to merge in sequence',
+        default: {},
+        placeholder: 'Add media item',
+        description: 'Videos and images to merge in sequence',
+        options: [
+          {
+            name: 'items',
+            displayName: 'Items',
+            values: [
+              {
+                displayName: 'Type',
+                name: 'type',
+                type: 'options',
+                options: [
+                  {
+                    name: 'Video',
+                    value: 'video',
+                  },
+                  {
+                    name: 'Image',
+                    value: 'image',
+                  },
+                ],
+                default: 'video',
+                description: 'Type of media (video or image)',
+              },
+              {
+                displayName: 'URL',
+                name: 'url',
+                type: 'string',
+                default: '',
+                placeholder: 'https://example.com/media.mp4',
+                required: true,
+                description: 'URL of the video or image',
+              },
+              {
+                displayName: 'Duration (Seconds)',
+                name: 'duration',
+                type: 'number',
+                displayOptions: {
+                  show: {
+                    type: ['image'],
+                  },
+                },
+                typeOptions: {
+                  minValue: 0.1,
+                },
+                default: 3,
+                description: 'Duration in seconds (only for images)',
+              },
+            ],
+          },
+        ],
       },
 
       {
@@ -1255,7 +1303,8 @@ export class SbRender implements INodeType {
             returnData.push(result);
           } else if (operation === 'Merge') {
             // Get merge parameters
-            const videoUrls = this.getNodeParameter('videoUrls', itemIndex, []) as string[];
+            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number }> };
+            const mediaItems = mediaItemsParam.items || [];
             const outputFilename = this.getNodeParameter('outputFilename', itemIndex, 'merged-video.mp4') as string;
             const mergeOutputFormat = this.getNodeParameter('mergeOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
             const mergeVideoCodec = this.getNodeParameter('mergeVideoCodec', itemIndex, 'libx264') as 'libx264' | 'libx265' | 'vp9';
@@ -1263,28 +1312,52 @@ export class SbRender implements INodeType {
             const mergeCustomCRF = this.getNodeParameter('mergeCustomCRF', itemIndex, 18) as number;
             const mergeOutputBinaryProperty = this.getNodeParameter('mergeOutputBinaryProperty', itemIndex, 'data') as string;
 
-            console.log(`[SB Render] Merge operation starting with ${videoUrls.length} videos`);
+            console.log(`[SB Render] Merge operation starting with ${mediaItems.length} items`);
 
-            if (!videoUrls || videoUrls.length === 0) {
-              throw new NodeOperationError(this.getNode(), 'No video URLs provided for merging', { itemIndex });
+            if (!mediaItems || mediaItems.length === 0) {
+              throw new NodeOperationError(this.getNode(), 'No media items provided for merging', { itemIndex });
             }
 
-            // Download all videos
-            console.log('[SB Render] Downloading videos...');
+            // Process all media items (videos and images)
+            console.log('[SB Render] Processing media items...');
             const videoPaths: string[] = [];
-            for (let i = 0; i < videoUrls.length; i++) {
-              const videoUrl = videoUrls[i];
-              console.log(`[SB Render] Downloading video ${i + 1}/${videoUrls.length}: ${videoUrl}`);
-              const videoPath = await fileManager.downloadFile(videoUrl);
-              videoPaths.push(videoPath);
-              console.log(`[SB Render] Downloaded to: ${videoPath}`);
+
+            for (let i = 0; i < mediaItems.length; i++) {
+              const item = mediaItems[i];
+              console.log(`[SB Render] Processing item ${i + 1}/${mediaItems.length}: type=${item.type}, url=${item.url}`);
+
+              if (item.type === 'video') {
+                // Download video
+                const videoPath = await fileManager.downloadFile(item.url);
+                videoPaths.push(videoPath);
+                console.log(`[SB Render] Downloaded video to: ${videoPath}`);
+              } else if (item.type === 'image') {
+                // Download image and convert to video
+                const imagePath = await fileManager.downloadFile(item.url);
+                console.log(`[SB Render] Downloaded image to: ${imagePath}, duration: ${item.duration || 3}s`);
+
+                // Create temporary video from image
+                const tempVideoPath = await fileManager.createTempFile('.mp4');
+                await videoComposer.createVideoFromImages(
+                  [imagePath],
+                  [item.duration || 3],
+                  tempVideoPath,
+                  mergeVideoCodec,
+                  mergeQuality,
+                  mergeCustomCRF,
+                  'mp4',
+                );
+
+                videoPaths.push(tempVideoPath);
+                console.log(`[SB Render] Converted image to video: ${tempVideoPath}`);
+              }
             }
 
             // Create output path
             const outputPath = await fileManager.createTempFile(`.${mergeOutputFormat}`);
             console.log(`[SB Render] Output path: ${outputPath}`);
 
-            // Merge videos
+            // Merge all videos
             console.log('[SB Render] Starting merge...');
             const videoBuffer = await videoComposer.mergeVideos(
               videoPaths,
@@ -1300,7 +1373,7 @@ export class SbRender implements INodeType {
             const result: INodeExecutionData = {
               json: {
                 success: true,
-                videoCount: videoUrls.length,
+                itemCount: mediaItems.length,
                 outputSize: videoBuffer.length,
                 outputFilename: outputFilename,
               },

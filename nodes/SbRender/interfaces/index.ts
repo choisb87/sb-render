@@ -15,8 +15,8 @@ export interface ISbRenderNodeParams {
   videoUrl?: string;
   videoBinaryProperty?: string;
 
-  // Video URLs (for Merge operation)
-  videoUrls?: string[];
+  // Media Items (for Merge operation)
+  mediaItems?: { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number }> };
   outputFilename?: string;
 
   // Image To Video (for ImageToVideo operation)

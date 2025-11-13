@@ -903,7 +903,7 @@ export class SbRender implements INodeType {
 
           console.log(`[SB Render] Processing item ${itemIndex}: resource=${resource}, operation=${operation}`);
 
-          if (resource === 'Video' && operation === 'Render') {
+          if (operation === 'Render') {
             // Get all parameters individually
             const params: ISbRenderNodeParams = {
               resource: 'Video',
@@ -1073,7 +1073,7 @@ export class SbRender implements INodeType {
             };
 
             returnData.push(result);
-          } else if (resource === 'Video' && operation === 'Merge') {
+          } else if (operation === 'Merge') {
             // Get merge parameters
             const videoUrls = this.getNodeParameter('videoUrls', itemIndex, []) as string[];
             const outputFilename = this.getNodeParameter('outputFilename', itemIndex, 'merged-video.mp4') as string;

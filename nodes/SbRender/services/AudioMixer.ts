@@ -37,24 +37,12 @@ export class AudioMixer implements IAudioMixer {
     // Handle BGM
     if (config.bgmPath) {
       const bgmVolume = config.bgmVolume / 100;
-      const fadeIn = config.bgmFadeIn;
-      const fadeOut = config.bgmFadeOut;
-      const fadeOutStart = Math.max(0, config.videoDuration - fadeOut);
 
-      // Trim or loop BGM to match video duration, then apply volume and fades
-      let bgmFilter = `[${inputIndex}:a]aloop=loop=-1:size=2e+09,atrim=end=${config.videoDuration},volume=${bgmVolume}`;
+      // Loop BGM to match video duration with more reliable filter chain
+      // Use aloop with samples calculation based on sample rate (44100 Hz standard)
+      const samples = Math.ceil(config.videoDuration * 44100);
+      const bgmFilter = `[${inputIndex}:a]aloop=loop=-1:size=${samples},atrim=duration=${config.videoDuration},asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
 
-      // Add fade in effect
-      if (fadeIn > 0) {
-        bgmFilter += `,afade=t=in:st=0:d=${fadeIn}`;
-      }
-
-      // Add fade out effect
-      if (fadeOut > 0) {
-        bgmFilter += `,afade=t=out:st=${fadeOutStart}:d=${fadeOut}`;
-      }
-
-      bgmFilter += '[bgm]';
       filters.push(bgmFilter);
       inputs.push('[bgm]');
       inputIndex++;

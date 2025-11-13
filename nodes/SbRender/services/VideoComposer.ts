@@ -398,14 +398,15 @@ export class VideoComposer implements IVideoComposer {
         // This ensures compatibility when mixing videos from different sources
         let filterString: string;
         if (allHaveAudio) {
-          // All videos have audio - normalize and concat with audio
+          // All videos have audio - normalize video and keep audio separate
           const scaleFilters = videoPaths.map((_, index) =>
             `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
           ).join(';');
-          const audioStreams = videoPaths.map((_, index) => `[${index}:a]`).join('');
-          const videoStreams = videoPaths.map((_, index) => `[v${index}]`).join('');
 
-          filterString = `${scaleFilters};${videoStreams}${audioStreams}concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
+          // Build concat inputs: video streams followed by audio streams
+          const concatInputs = videoPaths.map((_, index) => `[v${index}][${index}:a]`).join('');
+
+          filterString = `${scaleFilters};${concatInputs}concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
         } else {
           // Some videos don't have audio - normalize and concat video only
           const scaleFilters = videoPaths.map((_, index) =>

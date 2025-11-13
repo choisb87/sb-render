@@ -394,16 +394,26 @@ export class VideoComposer implements IVideoComposer {
           command.input(videoPath);
         });
 
-        // Create concat filter based on audio availability
+        // Normalize all videos to same resolution and framerate before concat
+        // This ensures compatibility when mixing videos from different sources
         let filterString: string;
         if (allHaveAudio) {
-          // All videos have audio - use normal concat
-          filterString = videoPaths.map((_, index) => `[${index}:v][${index}:a]`).join('') +
-                        `concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
+          // All videos have audio - normalize and concat with audio
+          const scaleFilters = videoPaths.map((_, index) =>
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+          ).join(';');
+          const audioStreams = videoPaths.map((_, index) => `[${index}:a]`).join('');
+          const videoStreams = videoPaths.map((_, index) => `[v${index}]`).join('');
+
+          filterString = `${scaleFilters};${videoStreams}${audioStreams}concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
         } else {
-          // Some videos don't have audio - video only concat
-          filterString = videoPaths.map((_, index) => `[${index}:v]`).join('') +
-                        `concat=n=${videoPaths.length}:v=1:a=0[outv]`;
+          // Some videos don't have audio - normalize and concat video only
+          const scaleFilters = videoPaths.map((_, index) =>
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+          ).join(';');
+          const videoStreams = videoPaths.map((_, index) => `[v${index}]`).join('');
+
+          filterString = `${scaleFilters};${videoStreams}concat=n=${videoPaths.length}:v=1:a=0[outv]`;
         }
 
         command.complexFilter(filterString);

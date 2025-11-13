@@ -1137,6 +1137,9 @@ export class SbRender implements INodeType {
             console.log('[SB Render] Pushing result to returnData');
             returnData.push(result);
             console.log(`[SB Render] ReturnData length: ${returnData.length}`);
+          } else {
+            console.log(`[SB Render] Unknown operation: ${operation}`);
+            throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, { itemIndex });
           }
         } catch (error) {
           if (this.continueOnFail()) {

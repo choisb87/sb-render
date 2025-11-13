@@ -855,6 +855,8 @@ export class SbRender implements INodeType {
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
 
+    console.log(`[SB Render] Execute function called with ${items.length} items`);
+
     // Initialize services
     const fileManager = new FileManager();
     const audioMixer = new AudioMixer();

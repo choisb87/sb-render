@@ -8,7 +8,7 @@
 
 export interface ISbRenderNodeParams {
   resource: 'Video';
-  operation: 'Render' | 'Merge';
+  operation: 'Render' | 'Merge' | 'ImageToVideo';
 
   // Video Input (for Render operation)
   videoSource?: 'url' | 'binary';
@@ -18,6 +18,10 @@ export interface ISbRenderNodeParams {
   // Video URLs (for Merge operation)
   videoUrls?: string[];
   outputFilename?: string;
+
+  // Image To Video (for ImageToVideo operation)
+  images?: Array<{ url: string; duration: number }>;
+  imageToVideoOutputFilename?: string;
 
   // BGM Input (Optional)
   enableBGM?: boolean;
@@ -54,6 +58,13 @@ export interface ISbRenderNodeParams {
   mergeQuality?: 'low' | 'medium' | 'high' | 'custom';
   mergeCustomCRF?: number;
   mergeOutputBinaryProperty?: string;
+
+  // Output Configuration (for ImageToVideo operation)
+  imageToVideoOutputFormat?: 'mp4' | 'mov' | 'webm';
+  imageToVideoVideoCodec?: 'libx264' | 'libx265' | 'vp9';
+  imageToVideoQuality?: 'low' | 'medium' | 'high' | 'custom';
+  imageToVideoCustomCRF?: number;
+  imageToVideoOutputBinaryProperty?: string;
 }
 
 // ============================================================================

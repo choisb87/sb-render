@@ -474,6 +474,88 @@ export class VideoComposer implements IVideoComposer {
   }
 
   /**
+   * Create video from multiple images with specified durations
+   */
+  async createVideoFromImages(
+    imagePaths: string[],
+    durations: number[],
+    outputPath: string,
+    videoCodec = 'libx264',
+    quality = 'high',
+    customCRF?: number,
+    outputFormat = 'mp4',
+  ): Promise<Buffer> {
+    if (imagePaths.length !== durations.length) {
+      throw new Error('Number of images must match number of durations');
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        const command = ffmpeg();
+
+        // Add all images as inputs with loop and duration
+        imagePaths.forEach((imagePath, index) => {
+          command
+            .input(imagePath)
+            .inputOptions([
+              '-loop 1',
+              `-t ${durations[index]}`,
+            ]);
+        });
+
+        // Build concat filter
+        const filterInputs = imagePaths.map((_, index) => `[${index}:v]`).join('');
+        const filterString = `${filterInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
+
+        console.log(`FFmpeg image to video filter: ${filterString}`);
+
+        // Apply concat filter
+        command.complexFilter(filterString);
+
+        // Set output codec and quality
+        const crf = this.getCRF(quality, customCRF);
+
+        command
+          .outputOptions([
+            '-map [outv]',
+            '-pix_fmt yuv420p', // Ensure compatibility
+            `-crf ${crf}`,
+            '-preset medium',
+            '-movflags +faststart',
+          ])
+          .videoCodec(videoCodec)
+          .format(outputFormat)
+          .output(outputPath);
+
+        // Progress tracking
+        command.on('progress', (progress: { percent?: number }) => {
+          if (progress.percent) {
+            console.log(`Creating video from images: ${Math.round(progress.percent)}% done`);
+          }
+        });
+
+        // Handle completion
+        command.on('end', async () => {
+          try {
+            const buffer = await fs.readFile(outputPath);
+            resolve(buffer);
+          } catch (error) {
+            reject(new Error(`Failed to read output file: ${error}`));
+          }
+        });
+
+        command.on('error', (error: Error) => {
+          reject(new Error(`FFmpeg image to video error: ${error.message}`));
+        });
+
+        command.run();
+      } catch (error) {
+        reject(new Error(`Image to video creation failed: ${error}`));
+      }
+    });
+  }
+
+  /**
    * Validate output configuration
    */
   validateConfig(config: ISbRenderNodeParams): void {

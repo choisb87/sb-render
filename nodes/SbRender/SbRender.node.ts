@@ -83,6 +83,12 @@ export class SbRender implements INodeType {
             description: 'Merge multiple videos in sequence',
             action: 'Merge videos',
           },
+          {
+            name: 'Image To Video',
+            value: 'ImageToVideo',
+            description: 'Create video from multiple images with specified durations',
+            action: 'Create video from images',
+          },
         ],
         default: 'Render',
       },
@@ -842,6 +848,186 @@ export class SbRender implements INodeType {
         default: 'data',
         description: 'Name of the binary property to store the merged video',
       },
+
+      // === IMAGE TO VIDEO SECTION ===
+      {
+        displayName: 'Images',
+        name: 'images',
+        type: 'fixedCollection',
+        typeOptions: {
+          multipleValues: true,
+        },
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+          },
+        },
+        default: {},
+        placeholder: 'Add Image',
+        options: [
+          {
+            name: 'imageValues',
+            displayName: 'Image',
+            values: [
+              {
+                displayName: 'Image URL',
+                name: 'url',
+                type: 'string',
+                default: '',
+                placeholder: 'https://example.com/image.jpg',
+                description: 'URL of the image',
+              },
+              {
+                displayName: 'Duration (seconds)',
+                name: 'duration',
+                type: 'number',
+                default: 3,
+                typeOptions: {
+                  minValue: 0.1,
+                  maxValue: 60,
+                  numberPrecision: 1,
+                },
+                description: 'How long to display this image in seconds',
+              },
+            ],
+          },
+        ],
+        description: 'List of images with their display durations',
+      },
+
+      {
+        displayName: 'Output Filename',
+        name: 'imageToVideoOutputFilename',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+          },
+        },
+        default: 'images-video.mp4',
+        placeholder: 'images-video.mp4',
+        description: 'Filename for the output video',
+      },
+
+      {
+        displayName: 'Output Format',
+        name: 'imageToVideoOutputFormat',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+          },
+        },
+        options: [
+          {
+            name: 'MP4',
+            value: 'mp4',
+          },
+          {
+            name: 'MOV',
+            value: 'mov',
+          },
+          {
+            name: 'WebM',
+            value: 'webm',
+          },
+        ],
+        default: 'mp4',
+        description: 'Output video format',
+      },
+
+      {
+        displayName: 'Video Codec',
+        name: 'imageToVideoVideoCodec',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+          },
+        },
+        options: [
+          {
+            name: 'H.264 (Libx264)',
+            value: 'libx264',
+          },
+          {
+            name: 'H.265 (Libx265)',
+            value: 'libx265',
+          },
+          {
+            name: 'VP9',
+            value: 'vp9',
+          },
+        ],
+        default: 'libx264',
+        description: 'Video codec for encoding',
+      },
+
+      {
+        displayName: 'Quality',
+        name: 'imageToVideoQuality',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+          },
+        },
+        options: [
+          {
+            name: 'Low',
+            value: 'low',
+            description: 'CRF 28 - Smaller file size',
+          },
+          {
+            name: 'Medium',
+            value: 'medium',
+            description: 'CRF 23 - Balanced',
+          },
+          {
+            name: 'High',
+            value: 'high',
+            description: 'CRF 18 - Better quality',
+          },
+          {
+            name: 'Custom',
+            value: 'custom',
+            description: 'Specify custom CRF value',
+          },
+        ],
+        default: 'high',
+        description: 'Video quality setting',
+      },
+
+      {
+        displayName: 'Custom CRF',
+        name: 'imageToVideoCustomCRF',
+        type: 'number',
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+            imageToVideoQuality: ['custom'],
+          },
+        },
+        default: 18,
+        typeOptions: {
+          minValue: 0,
+          maxValue: 51,
+        },
+        description: 'Custom CRF value (0-51, lower = better quality)',
+      },
+
+      {
+        displayName: 'Output Binary Property',
+        name: 'imageToVideoOutputBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['ImageToVideo'],
+          },
+        },
+        default: 'data',
+        description: 'Name of the binary property to store the output video',
+      },
     ],
   };
 
@@ -1123,6 +1309,76 @@ export class SbRender implements INodeType {
                   videoBuffer,
                   outputFilename,
                   `video/${mergeOutputFormat}`,
+                ),
+              },
+              pairedItem: itemIndex,
+            };
+
+            console.log('[SB Render] Pushing result to returnData');
+            returnData.push(result);
+            console.log(`[SB Render] ReturnData length: ${returnData.length}`);
+          } else if (operation === 'ImageToVideo') {
+            // Get ImageToVideo parameters
+            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number }> };
+            const imageValues = imagesParam.imageValues || [];
+            const outputFilename = this.getNodeParameter('imageToVideoOutputFilename', itemIndex, 'images-video.mp4') as string;
+            const imageToVideoOutputFormat = this.getNodeParameter('imageToVideoOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
+            const imageToVideoVideoCodec = this.getNodeParameter('imageToVideoVideoCodec', itemIndex, 'libx264') as 'libx264' | 'libx265' | 'vp9';
+            const imageToVideoQuality = this.getNodeParameter('imageToVideoQuality', itemIndex, 'high') as 'low' | 'medium' | 'high' | 'custom';
+            const imageToVideoCustomCRF = this.getNodeParameter('imageToVideoCustomCRF', itemIndex, 18) as number;
+            const imageToVideoOutputBinaryProperty = this.getNodeParameter('imageToVideoOutputBinaryProperty', itemIndex, 'data') as string;
+
+            console.log(`[SB Render] ImageToVideo operation starting with ${imageValues.length} images`);
+
+            if (!imageValues || imageValues.length === 0) {
+              throw new NodeOperationError(this.getNode(), 'No images provided for ImageToVideo operation', { itemIndex });
+            }
+
+            // Download all images
+            console.log('[SB Render] Downloading images...');
+            const imagePaths: string[] = [];
+            const durations: number[] = [];
+
+            for (let i = 0; i < imageValues.length; i++) {
+              const imageValue = imageValues[i];
+              console.log(`[SB Render] Downloading image ${i + 1}/${imageValues.length}: ${imageValue.url}`);
+              const imagePath = await fileManager.downloadFile(imageValue.url);
+              imagePaths.push(imagePath);
+              durations.push(imageValue.duration);
+              console.log(`[SB Render] Downloaded to: ${imagePath}, duration: ${imageValue.duration}s`);
+            }
+
+            // Create output path
+            const outputPath = await fileManager.createTempFile(`.${imageToVideoOutputFormat}`);
+            console.log(`[SB Render] Output path: ${outputPath}`);
+
+            // Create video from images
+            console.log('[SB Render] Creating video from images...');
+            const videoBuffer = await videoComposer.createVideoFromImages(
+              imagePaths,
+              durations,
+              outputPath,
+              imageToVideoVideoCodec,
+              imageToVideoQuality,
+              imageToVideoCustomCRF,
+              imageToVideoOutputFormat,
+            );
+            console.log(`[SB Render] Video creation completed, buffer size: ${videoBuffer.length} bytes`);
+
+            // Return result with binary data
+            const result: INodeExecutionData = {
+              json: {
+                success: true,
+                imageCount: imageValues.length,
+                totalDuration: durations.reduce((sum, d) => sum + d, 0),
+                outputSize: videoBuffer.length,
+                outputFilename: outputFilename,
+              },
+              binary: {
+                [imageToVideoOutputBinaryProperty]: await this.helpers.prepareBinaryData(
+                  videoBuffer,
+                  outputFilename,
+                  `video/${imageToVideoOutputFormat}`,
                 ),
               },
               pairedItem: itemIndex,

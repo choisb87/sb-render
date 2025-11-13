@@ -149,7 +149,7 @@ export class SbRender implements INodeType {
         default: 'data',
         required: true,
         placeholder: 'data',
-        description: 'Name of the binary property containing the video',
+        description: 'Name of the binary property from previous node (usually "data"). NOT the filename.',
       },
 
       // === BGM SECTION ===
@@ -1103,21 +1103,31 @@ export class SbRender implements INodeType {
       }
 
       if (source === 'binary' && binaryProperty) {
-        const binaryData = this.helpers.assertBinaryData(itemIndex, binaryProperty);
-        const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, binaryProperty);
-        const getExtension = (mimeType: string): string => {
-          const mimeMap: Record<string, string> = {
-            'video/mp4': '.mp4',
-            'video/quicktime': '.mov',
-            'video/webm': '.webm',
-            'audio/mpeg': '.mp3',
-            'audio/wav': '.wav',
-            'audio/aac': '.aac',
+        try {
+          const binaryData = this.helpers.assertBinaryData(itemIndex, binaryProperty);
+          const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, binaryProperty);
+          const getExtension = (mimeType: string): string => {
+            const mimeMap: Record<string, string> = {
+              'video/mp4': '.mp4',
+              'video/quicktime': '.mov',
+              'video/webm': '.webm',
+              'audio/mpeg': '.mp3',
+              'audio/wav': '.wav',
+              'audio/aac': '.aac',
+            };
+            return mimeMap[mimeType] || '';
           };
-          return mimeMap[mimeType] || '';
-        };
-        const extension = binaryData.fileExtension || getExtension(binaryData.mimeType);
-        return await fileManager.extractBinary(buffer, extension);
+          const extension = binaryData.fileExtension || getExtension(binaryData.mimeType);
+          return await fileManager.extractBinary(buffer, extension);
+        } catch (error) {
+          // Get available binary properties for better error message
+          const item = this.getInputData()[itemIndex];
+          const availableProperties = item.binary ? Object.keys(item.binary) : [];
+          const errorMsg = availableProperties.length > 0
+            ? `Binary property "${binaryProperty}" not found. Available properties: ${availableProperties.join(', ')}. Use the property name, NOT the filename.`
+            : `No binary data found in input item ${itemIndex}. Make sure the previous node outputs binary data.`;
+          throw new NodeOperationError(this.getNode(), errorMsg, { itemIndex });
+        }
       }
 
       throw new NodeOperationError(this.getNode(), 'Invalid media source configuration', { itemIndex });

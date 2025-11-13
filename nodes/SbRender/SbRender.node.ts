@@ -1302,9 +1302,23 @@ export class SbRender implements INodeType {
 
             returnData.push(result);
           } else if (operation === 'Merge') {
-            // Get merge parameters
+            // Get merge parameters (support both old videoUrls and new mediaItems format)
             const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number }> };
-            const mediaItems = mediaItemsParam.items || [];
+            let mediaItems = mediaItemsParam.items || [];
+
+            // Backward compatibility: check for old videoUrls parameter
+            if (mediaItems.length === 0) {
+              try {
+                const videoUrls = this.getNodeParameter('videoUrls', itemIndex, []) as string[];
+                if (videoUrls && videoUrls.length > 0) {
+                  console.log('[SB Render] Using legacy videoUrls parameter');
+                  mediaItems = videoUrls.map(url => ({ type: 'video' as const, url }));
+                }
+              } catch (error) {
+                // videoUrls parameter doesn't exist, that's fine
+              }
+            }
+
             const outputFilename = this.getNodeParameter('outputFilename', itemIndex, 'merged-video.mp4') as string;
             const mergeOutputFormat = this.getNodeParameter('mergeOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
             const mergeVideoCodec = this.getNodeParameter('mergeVideoCodec', itemIndex, 'libx264') as 'libx264' | 'libx265' | 'vp9';

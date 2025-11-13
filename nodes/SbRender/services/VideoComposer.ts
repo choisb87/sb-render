@@ -503,13 +503,18 @@ export class VideoComposer implements IVideoComposer {
             ]);
         });
 
-        // Build concat filter
-        const filterInputs = imagePaths.map((_, index) => `[${index}:v]`).join('');
-        const filterString = `${filterInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
+        // Build filter to scale all images to 1920x1080 and concat
+        // Each image is scaled to fit within 1920x1080 with padding (black bars) if needed
+        const scaleFilters = imagePaths.map((_, index) =>
+          `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+        ).join(';');
 
-        console.log(`FFmpeg image to video filter: ${filterString}`);
+        const concatInputs = imagePaths.map((_, index) => `[v${index}]`).join('');
+        const filterString = `${scaleFilters};${concatInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
 
-        // Apply concat filter
+        console.log(`FFmpeg image to video filter: scale and concat`);
+
+        // Apply complex filter
         command.complexFilter(filterString);
 
         // Set output codec and quality

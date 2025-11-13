@@ -878,7 +878,7 @@ export class SbRender implements INodeType {
                 description: 'URL of the image',
               },
               {
-                displayName: 'Duration (seconds)',
+                displayName: 'Duration (Seconds)',
                 name: 'duration',
                 type: 'number',
                 default: 3,

@@ -286,11 +286,14 @@ export class VideoComposer implements IVideoComposer {
    */
   async getVideoMetadata(videoPath: string): Promise<IVideoMetadata> {
     return new Promise((resolve) => {
+      console.log(`[Metadata] Checking video: ${videoPath}`);
       // Try to use ffprobe
       ffmpeg.ffprobe(videoPath, (error, metadata) => {
         if (error) {
           // If ffprobe fails, return default metadata
-          console.warn('ffprobe failed, using default metadata:', error.message);
+          console.error('[Metadata] ❌ ffprobe failed for:', videoPath);
+          console.error('[Metadata] Error details:', error.message);
+          console.error('[Metadata] Full error:', JSON.stringify(error, null, 2));
           resolve({
             duration: 10, // Default 10 seconds
             width: 1920,
@@ -305,15 +308,22 @@ export class VideoComposer implements IVideoComposer {
         const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
         const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
 
+        console.log(`[Metadata] Streams found:`, {
+          videoStream: videoStream ? `${videoStream.codec_name} ${videoStream.width}x${videoStream.height}` : 'none',
+          audioStream: audioStream ? `${audioStream.codec_name} channels=${audioStream.channels}` : 'none'
+        });
+
         // Check if audio stream is valid (has codec and channels)
         const hasValidAudio = !!audioStream &&
                              !!audioStream.codec_name &&
                              audioStream.codec_name !== 'none' &&
                              (audioStream.channels ?? 0) > 0;
 
+        console.log(`[Metadata] hasValidAudio: ${hasValidAudio}`);
+
         if (!videoStream) {
           // No video stream found, use defaults
-          console.warn('No video stream found, using default metadata');
+          console.warn('[Metadata] ⚠️  No video stream found, using default metadata');
           resolve({
             duration: 10,
             width: 1920,
@@ -325,14 +335,17 @@ export class VideoComposer implements IVideoComposer {
           return;
         }
 
-        resolve({
+        const result = {
           duration: metadata.format.duration || 10,
           width: videoStream.width || 1920,
           height: videoStream.height || 1080,
           hasAudio: hasValidAudio,
           videoCodec: videoStream.codec_name || 'unknown',
           audioCodec: audioStream?.codec_name,
-        });
+        };
+
+        console.log(`[Metadata] ✅ Result:`, result);
+        resolve(result);
       });
     });
   }

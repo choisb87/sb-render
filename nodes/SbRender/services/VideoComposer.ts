@@ -435,36 +435,30 @@ export class VideoComposer implements IVideoComposer {
         console.log(`[Merge] FFmpeg filter:`, filterString);
         command.complexFilter(filterString);
 
-        // Map output streams
+        // Map output streams FIRST (must come before codec options for FFmpeg)
+        const crf = this.getCRF(quality, customCRF);
+
         if (allHaveAudio) {
           console.log(`[Merge] Mapping both video and audio outputs`);
           command.outputOptions([
-            '-map [outv]',
-            '-map [outa]',
+            '-map', '[outv]',
+            '-map', '[outa]',
+            `-c:v`, videoCodec,
+            `-crf`, crf.toString(),
+            `-preset`, 'medium',
+            `-c:a`, 'aac',
+            `-b:a`, '192k',
+            '-movflags', '+faststart',
           ]);
         } else {
           console.log(`[Merge] Mapping video output only (no audio)`);
           command.outputOptions([
-            '-map [outv]',
+            '-map', '[outv]',
+            `-c:v`, videoCodec,
+            `-crf`, crf.toString(),
+            `-preset`, 'medium',
+            '-movflags', '+faststart',
           ]);
-        }
-
-        // Set output codec and quality
-        const crf = this.getCRF(quality, customCRF);
-
-        command
-          .videoCodec(videoCodec)
-          .outputOptions([
-            `-crf ${crf}`,
-            '-preset medium',
-            '-movflags +faststart',
-          ]);
-
-        // Add audio codec only if videos have audio
-        if (allHaveAudio) {
-          command
-            .audioCodec('aac')
-            .audioBitrate('192k');
         }
 
         command

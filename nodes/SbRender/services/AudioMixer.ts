@@ -38,9 +38,9 @@ export class AudioMixer implements IAudioMixer {
     if (config.bgmPath) {
       const bgmVolume = config.bgmVolume / 100;
 
-      // Loop BGM to match video duration using stream_loop (more memory efficient)
-      // This approach doesn't load entire audio into memory
-      const bgmFilter = `[${inputIndex}:a]atrim=duration=${config.videoDuration},asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
+      // BGM is already looped and trimmed at input level (-stream_loop -1 -t duration)
+      // Just apply volume and reset timestamps
+      const bgmFilter = `[${inputIndex}:a]asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
 
       filters.push(bgmFilter);
       inputs.push('[bgm]');

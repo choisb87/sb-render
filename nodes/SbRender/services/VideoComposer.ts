@@ -159,8 +159,12 @@ export class VideoComposer implements IVideoComposer {
         const command = ffmpeg(videoPath);
 
         // Add BGM input with stream loop for memory efficiency
+        // Loop infinitely and trim to video duration at input level
         if (bgmPath) {
-          command.input(bgmPath).inputOptions(['-stream_loop', '-1']);
+          command.input(bgmPath).inputOptions([
+            '-stream_loop', '-1',
+            '-t', videoDuration.toString()
+          ]);
         }
 
         // Add narration input
@@ -373,17 +377,28 @@ export class VideoComposer implements IVideoComposer {
 
     // Check if videos have audio streams
     const hasAudio = await Promise.all(
-      videoPaths.map(async (videoPath) => {
+      videoPaths.map(async (videoPath, index) => {
         try {
           const metadata = await this.getVideoMetadata(videoPath);
+          console.log(`[Merge] Video ${index} audio check:`, {
+            path: videoPath,
+            hasAudio: metadata.hasAudio,
+            audioCodec: metadata.audioCodec
+          });
           return metadata.hasAudio;
-        } catch {
+        } catch (error) {
+          console.warn(`[Merge] Failed to check audio for video ${index}:`, error);
           return false;
         }
       })
     );
 
     const allHaveAudio = hasAudio.every(has => has);
+    console.log(`[Merge] Audio summary:`, {
+      hasAudio,
+      allHaveAudio,
+      totalVideos: videoPaths.length
+    });
 
     return new Promise((resolve, reject) => {
       try {

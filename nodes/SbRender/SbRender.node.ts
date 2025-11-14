@@ -1076,6 +1076,15 @@ export class SbRender implements INodeType {
         default: 'data',
         description: 'Name of the binary property to store the output video',
       },
+
+      // === DEBUG OPTIONS ===
+      {
+        displayName: 'Debug Mode',
+        name: 'debugMode',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to enable debug logging to /tmp/sb-render-debug.log',
+      },
     ],
   };
 
@@ -1084,6 +1093,19 @@ export class SbRender implements INodeType {
     const returnData: INodeExecutionData[] = [];
 
     console.log(`[SB Render] Execute function called with ${items.length} items`);
+
+    // Get debug mode setting (available across all items)
+    const debugMode = this.getNodeParameter('debugMode', 0, false) as boolean;
+    if (debugMode) {
+      console.log('[SB Render] Debug mode enabled - logging to /tmp/sb-render-debug.log');
+    }
+
+    // Set debug mode in VideoComposer via environment variable
+    if (debugMode) {
+      process.env.SB_RENDER_DEBUG = 'true';
+    } else {
+      delete process.env.SB_RENDER_DEBUG;
+    }
 
     // Initialize services
     const fileManager = new FileManager();

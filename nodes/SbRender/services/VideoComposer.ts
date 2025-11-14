@@ -415,7 +415,7 @@ export class VideoComposer implements IVideoComposer {
         if (allHaveAudio) {
           // All videos have audio - normalize video and keep audio separate
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}];[${index}:a]acopy[a${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}];[${index}:a]anull[a${index}]`
           ).join(';');
 
           // Build concat inputs: video and audio streams in pairs

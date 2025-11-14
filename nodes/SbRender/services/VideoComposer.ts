@@ -298,6 +298,8 @@ export class VideoComposer implements IVideoComposer {
           console.error('[Metadata] ❌ ffprobe failed for:', videoPath);
           console.error('[Metadata] Error details:', error.message);
           console.error('[Metadata] Full error:', JSON.stringify(error, null, 2));
+          appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Metadata] ❌ ffprobe FAILED for: ${videoPath}\n`);
+          appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Metadata] Error: ${error.message}\n`);
           resolve({
             duration: 10, // Default 10 seconds
             width: 1920,

@@ -28,11 +28,13 @@
     "format": "prettier nodes --write",
     "lint": "eslint nodes --ext .ts",
     "lintfix": "eslint nodes --ext .ts --fix",
-    "prepublishOnly": "npm run build && npm run lint"
+    "prepublishOnly": "npm run build && npm run lint",
+    "postinstall": "node scripts/fix-ffprobe-permissions.js"
   },
   "files": [
     "dist",
-    "fonts"
+    "fonts",
+    "scripts"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,

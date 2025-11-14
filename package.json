@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-sb-render",
-  "version": "1.0.40",
+  "version": "1.0.41",
   "description": "n8n community node for video rendering with customizable subtitles, BGM, and narration",
   "keywords": [
     "n8n-community-node-package",

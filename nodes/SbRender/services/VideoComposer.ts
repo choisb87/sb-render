@@ -432,15 +432,18 @@ export class VideoComposer implements IVideoComposer {
           filterString = `${scaleFilters};${videoStreams}concat=n=${videoPaths.length}:v=1:a=0[outv]`;
         }
 
+        console.log(`[Merge] FFmpeg filter:`, filterString);
         command.complexFilter(filterString);
 
         // Map output streams
         if (allHaveAudio) {
+          console.log(`[Merge] Mapping both video and audio outputs`);
           command.outputOptions([
             '-map [outv]',
             '-map [outa]',
           ]);
         } else {
+          console.log(`[Merge] Mapping video output only (no audio)`);
           command.outputOptions([
             '-map [outv]',
           ]);

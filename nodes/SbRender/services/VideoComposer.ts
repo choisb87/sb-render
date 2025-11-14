@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs';
+import { promises as fs, appendFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { accessSync } from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
@@ -286,7 +286,11 @@ export class VideoComposer implements IVideoComposer {
    */
   async getVideoMetadata(videoPath: string): Promise<IVideoMetadata> {
     return new Promise((resolve) => {
-      console.log(`[Metadata] Checking video: ${videoPath}`);
+      const logMsg = `[Metadata] Checking video: ${videoPath}`;
+      console.log(logMsg);
+      // Also write to file for n8n debugging
+      appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} ${logMsg}\n`);
+
       // Try to use ffprobe
       ffmpeg.ffprobe(videoPath, (error, metadata) => {
         if (error) {
@@ -308,10 +312,12 @@ export class VideoComposer implements IVideoComposer {
         const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
         const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
 
-        console.log(`[Metadata] Streams found:`, {
+        const streamInfo = {
           videoStream: videoStream ? `${videoStream.codec_name} ${videoStream.width}x${videoStream.height}` : 'none',
           audioStream: audioStream ? `${audioStream.codec_name} channels=${audioStream.channels}` : 'none'
-        });
+        };
+        console.log(`[Metadata] Streams found:`, streamInfo);
+        appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Metadata] Streams: ${JSON.stringify(streamInfo)}\n`);
 
         // Check if audio stream is valid (has codec and channels)
         const hasValidAudio = !!audioStream &&
@@ -320,6 +326,7 @@ export class VideoComposer implements IVideoComposer {
                              (audioStream.channels ?? 0) > 0;
 
         console.log(`[Metadata] hasValidAudio: ${hasValidAudio}`);
+        appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Metadata] hasValidAudio: ${hasValidAudio}\n`);
 
         if (!videoStream) {
           // No video stream found, use defaults
@@ -407,11 +414,13 @@ export class VideoComposer implements IVideoComposer {
     );
 
     const allHaveAudio = hasAudio.every(has => has);
-    console.log(`[Merge] Audio summary:`, {
+    const audioSummary = {
       hasAudio,
       allHaveAudio,
       totalVideos: videoPaths.length
-    });
+    };
+    console.log(`[Merge] Audio summary:`, audioSummary);
+    appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Merge] Audio summary: ${JSON.stringify(audioSummary)}\n`);
 
     return new Promise((resolve, reject) => {
       try {
@@ -446,6 +455,7 @@ export class VideoComposer implements IVideoComposer {
         }
 
         console.log(`[Merge] FFmpeg filter:`, filterString);
+        appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Merge] FFmpeg filter: ${filterString}\n`);
         command.complexFilter(filterString);
 
         // Map output streams FIRST (must come before codec options for FFmpeg)
@@ -453,6 +463,7 @@ export class VideoComposer implements IVideoComposer {
 
         if (allHaveAudio) {
           console.log(`[Merge] Mapping both video and audio outputs`);
+          appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [Merge] Mapping both video and audio outputs\n`);
           command.outputOptions([
             '-map', '[outv]',
             '-map', '[outa]',
@@ -481,6 +492,7 @@ export class VideoComposer implements IVideoComposer {
         // Handle events
         command.on('start', (commandLine: string) => {
           console.log('FFmpeg merge command:', commandLine);
+          appendFileSync('/tmp/sb-render-debug.log', `${new Date().toISOString()} [FFmpeg] Command: ${commandLine}\n`);
         });
 
         command.on('progress', (progress: { percent?: number }) => {

@@ -38,10 +38,9 @@ export class AudioMixer implements IAudioMixer {
     if (config.bgmPath) {
       const bgmVolume = config.bgmVolume / 100;
 
-      // Loop BGM to match video duration with more reliable filter chain
-      // Use aloop with samples calculation based on sample rate (44100 Hz standard)
-      const samples = Math.ceil(config.videoDuration * 44100);
-      const bgmFilter = `[${inputIndex}:a]aloop=loop=-1:size=${samples},atrim=duration=${config.videoDuration},asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
+      // Loop BGM to match video duration using stream_loop (more memory efficient)
+      // This approach doesn't load entire audio into memory
+      const bgmFilter = `[${inputIndex}:a]atrim=duration=${config.videoDuration},asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
 
       filters.push(bgmFilter);
       inputs.push('[bgm]');

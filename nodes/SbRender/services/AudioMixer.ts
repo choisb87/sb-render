@@ -75,10 +75,12 @@ export class AudioMixer implements IAudioMixer {
       const singleInput = inputs[0];
       filters.push(`${singleInput}acopy[mixed]`);
     } else {
-      // Mix multiple audio sources (BGM is already trimmed to video duration)
+      // Mix multiple audio sources
+      // Use 'longest' to ensure BGM continues for entire video duration
+      // BGM is already looped and trimmed to video duration at input level
       const mixInputs = inputs.join('');
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=shortest:dropout_transition=2,dynaudnorm[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:dropout_transition=2,dynaudnorm[mixed]`,
       );
     }
 

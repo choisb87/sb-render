@@ -28,6 +28,14 @@ export class AudioMixer implements IAudioMixer {
     const inputs: string[] = [];
     let inputIndex = 1; // Start from 1 (0 is video, 1 is first audio input)
 
+    // Validate essential parameters
+    if (!config.videoDuration || config.videoDuration <= 0) {
+      console.warn('[AudioMixer] Invalid video duration, using default 10s');
+      config.videoDuration = 10;
+    }
+
+    console.log(`[AudioMixer] Building filter chain - BGM: ${!!config.bgmPath}, Narration: ${!!config.narrationPath}, OriginalAudio: ${hasOriginalAudio}`);
+
     // Handle original video audio
     if (hasOriginalAudio) {
       filters.push('[0:a]volume=1.0[original]');
@@ -54,9 +62,8 @@ export class AudioMixer implements IAudioMixer {
         bgmFilter += `,afade=t=out:st=${fadeStart}:d=${bgmFadeOut}`;
       }
       
-      // Use apad instead of atrim for better duration handling
-      // This ensures BGM continues for the entire video even if slightly longer
-      bgmFilter += `,apad=pad_dur=${videoDuration},atrim=0:${videoDuration},asetpts=PTS-STARTPTS[bgm]`;
+      // Use atrim to match video duration - remove invalid apad option
+      bgmFilter += `,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[bgm]`;
 
       filters.push(bgmFilter);
       inputs.push('[bgm]');
@@ -94,16 +101,23 @@ export class AudioMixer implements IAudioMixer {
       // Mix multiple audio sources
       // Use 'longest' to ensure BGM continues for entire video duration
       const mixInputs = inputs.join('');
-      const videoDuration = config.videoDuration;
       
-      // Ensure all inputs are padded to video duration before mixing
-      // This prevents audio cutoff issues in n8n environment
+      // Simple mix without problematic options that may not be supported
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=first:dropout_transition=2,apad=pad_dur=${videoDuration},atrim=0:${videoDuration},dynaudnorm[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:dropout_transition=2[mixed]`,
       );
     }
 
-    return filters.join(';');
+    const filterChain = filters.join(';');
+    console.log(`[AudioMixer] Generated filter chain: ${filterChain}`);
+    
+    // Basic validation - check for common syntax issues
+    if (filterChain.includes('undefined') || filterChain.includes('NaN')) {
+      console.error('[AudioMixer] Invalid filter chain detected, contains undefined/NaN values');
+      return ''; // Return empty to avoid FFmpeg errors
+    }
+    
+    return filterChain;
   }
 
   /**

@@ -265,14 +265,15 @@ export class VideoComposer implements IVideoComposer {
 
         // Add BGM input with better looping strategy
         if (bgmPath) {
-          console.log(`[ComposeAudioMix] Adding BGM input with stream_loop for ${videoDuration}s video`);
-          debugLog(`[ComposeAudioMix] BGM strategy: loop BGM (${bgmDuration}s) for video (${videoDuration}s)`);
+          console.log(`[ComposeAudioMix] Adding BGM input for ${videoDuration}s video`);
+          debugLog(`[ComposeAudioMix] BGM strategy: loop BGM for video (${videoDuration}s)`);
           
-          // Use stream_loop with a safety margin and shortest option in filter
-          // This ensures BGM continues for the entire video duration even if our duration calculation is slightly off
-          const loopCount = Math.ceil(videoDuration / bgmDuration) + 1; // Extra loop for safety
+          // Use stream_loop with safer approach
+          // Calculate needed loops and add safety margin
+          const safeLoops = Math.max(1, Math.ceil(videoDuration / Math.max(bgmDuration, 1))) + 1;
           command.input(bgmPath).inputOptions([
-            '-stream_loop', loopCount.toString(), // Loop more than needed
+            '-stream_loop', safeLoops.toString(),
+            '-t', (videoDuration + 5).toString() // Add 5 second buffer
           ]);
         }
 
@@ -305,8 +306,13 @@ export class VideoComposer implements IVideoComposer {
         }
 
         // Apply complex audio filter
-        if (finalAudioFilterChain) {
+        if (finalAudioFilterChain && finalAudioFilterChain.trim() !== '') {
+          console.log(`[ComposeAudioMix] Applying audio filter: ${finalAudioFilterChain}`);
+          debugLog(`[ComposeAudioMix] Filter chain: ${finalAudioFilterChain}`);
           command.complexFilter(finalAudioFilterChain);
+        } else {
+          console.log(`[ComposeAudioMix] No audio filter chain to apply`);
+          debugLog(`[ComposeAudioMix] Empty or invalid filter chain: "${finalAudioFilterChain}"`);
         }
 
         // Video filters

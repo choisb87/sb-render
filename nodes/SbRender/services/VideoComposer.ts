@@ -263,17 +263,14 @@ export class VideoComposer implements IVideoComposer {
       try {
         const command = ffmpeg(videoPath);
 
-        // Add BGM input with better looping strategy
+        // Add BGM input with simple approach
         if (bgmPath) {
           console.log(`[ComposeAudioMix] Adding BGM input for ${videoDuration}s video`);
-          debugLog(`[ComposeAudioMix] BGM strategy: loop BGM for video (${videoDuration}s)`);
-          
-          // Use stream_loop with safer approach
-          // Calculate needed loops and add safety margin
-          const safeLoops = Math.max(1, Math.ceil(videoDuration / Math.max(bgmDuration, 1))) + 1;
+          debugLog(`[ComposeAudioMix] BGM strategy: simple input mapping`);
+          // Use simple input approach without complex looping
           command.input(bgmPath).inputOptions([
-            '-stream_loop', safeLoops.toString(),
-            '-t', (videoDuration + 5).toString() // Add 5 second buffer
+            '-stream_loop', '10',  // Fixed number of loops instead of calculation
+            '-t', (videoDuration + 10).toString() // Buffer time
           ]);
         }
 
@@ -301,18 +298,66 @@ export class VideoComposer implements IVideoComposer {
             narrationDelay: config.narrationDelay || 0,
           };
 
+          console.log(`[ComposeAudioMix] Audio config:`, JSON.stringify(audioConfig, null, 2));
+          debugLog(`[ComposeAudioMix] Audio config: ${JSON.stringify(audioConfig)}`);
+
           finalAudioFilterChain = audioMixer.getAudioFilterChain(audioConfig, videoMetadata.hasAudio);
-          console.log(`[ComposeAudioMix] Generated filter chain: ${finalAudioFilterChain}`);
+          console.log(`[ComposeAudioMix] Generated filter chain: "${finalAudioFilterChain}"`);
+          debugLog(`[ComposeAudioMix] Generated filter chain: ${finalAudioFilterChain}`);
         }
 
-        // Apply complex audio filter
+        // Apply complex audio filter with fallback to simple approach
         if (finalAudioFilterChain && finalAudioFilterChain.trim() !== '') {
-          console.log(`[ComposeAudioMix] Applying audio filter: ${finalAudioFilterChain}`);
+          console.log(`[ComposeAudioMix] Attempting complex filter: ${finalAudioFilterChain}`);
           debugLog(`[ComposeAudioMix] Filter chain: ${finalAudioFilterChain}`);
-          command.complexFilter(finalAudioFilterChain);
+          
+          try {
+            // Validate filter chain before applying
+            if (finalAudioFilterChain.includes('[mixed]')) {
+              command.complexFilter(finalAudioFilterChain);
+              console.log(`[ComposeAudioMix] ✅ Complex filter applied successfully`);
+            } else {
+              throw new Error('Filter chain missing [mixed] output');
+            }
+          } catch (filterError) {
+            console.error(`[ComposeAudioMix] ❌ Complex filter failed, falling back to simple audio mapping:`, filterError);
+            debugLog(`[ComposeAudioMix] Complex filter error: ${filterError}`);
+            
+            // Fallback to simple audio mapping
+            finalAudioFilterChain = '';
+            
+            // Simple audio mapping based on what inputs we have
+            if (bgmPath && narrationPath) {
+              // Use simple audio filters instead of complex filter
+              command.audioFilters([
+                {
+                  filter: 'volume',
+                  options: (config.bgmVolume || 30) / 100
+                }
+              ]);
+            } else if (bgmPath) {
+              command.audioFilters([
+                {
+                  filter: 'volume',
+                  options: (config.bgmVolume || 30) / 100
+                }
+              ]);
+            }
+          }
         } else {
-          console.log(`[ComposeAudioMix] No audio filter chain to apply`);
+          console.log(`[ComposeAudioMix] No complex audio filter, using simple audio mapping`);
           debugLog(`[ComposeAudioMix] Empty or invalid filter chain: "${finalAudioFilterChain}"`);
+          
+          // Apply simple volume control if BGM is present
+          if (bgmPath) {
+            console.log(`[ComposeAudioMix] Applying simple BGM volume: ${config.bgmVolume || 30}%`);
+            command.audioFilters([
+              {
+                filter: 'volume',
+                options: (config.bgmVolume || 30) / 100
+              }
+            ]);
+          }
         }
 
         // Video filters
@@ -357,12 +402,28 @@ export class VideoComposer implements IVideoComposer {
           outputOptions.push('-r 24');
         }
 
-        // Map video and mixed audio
-        if (finalAudioFilterChain) {
-          // BGM/나레이션 믹싱이 있는 경우
+        // Map video and mixed audio with safe fallback
+        if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
+          // Complex filter was successfully applied
+          console.log(`[ComposeAudioMix] Using complex filter output mapping`);
           outputOptions.unshift('-map [mixed]', '-map 0:v');
+        } else if (bgmPath || narrationPath) {
+          // Simple audio mapping when complex filter failed or not used
+          console.log(`[ComposeAudioMix] Using simple audio mapping - BGM: ${!!bgmPath}, Narration: ${!!narrationPath}`);
+          if (bgmPath && !narrationPath) {
+            // BGM only - map BGM audio and video
+            outputOptions.unshift('-map 1:a', '-map 0:v');
+          } else if (narrationPath && !bgmPath) {
+            // Narration only - map narration audio and video
+            const narrationIndex = videoMetadata.hasAudio ? 1 : 1;
+            outputOptions.unshift(`-map ${narrationIndex}:a`, '-map 0:v');
+          } else {
+            // Both BGM and narration - use first audio input (BGM)
+            outputOptions.unshift('-map 1:a', '-map 0:v');
+          }
         } else {
-          // 자막만 추가하는 경우 - 원본 오디오 보존
+          // No additional audio - preserve original if exists
+          console.log(`[ComposeAudioMix] Preserving original audio only`);
           outputOptions.unshift('-map 0:a?', '-map 0:v');
         }
 

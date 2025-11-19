@@ -49,22 +49,33 @@ export class AudioMixer implements IAudioMixer {
       const bgmFadeIn = config.bgmFadeIn || 0;
       const bgmFadeOut = config.bgmFadeOut || 0;
 
+      console.log(`[AudioMixer] Processing BGM - Volume: ${bgmVolume}, Duration: ${videoDuration}s`);
+
       // BGM is looped at input level with stream_loop
-      // Apply volume, fade effects, and ensure it matches video duration
+      // Apply volume and basic processing
       let bgmFilter = `[${inputIndex}:a]volume=${bgmVolume}`;
       
-      // Add fade effects if specified
-      if (bgmFadeIn > 0) {
+      // Add fade effects if specified and values are valid
+      if (bgmFadeIn > 0 && !isNaN(bgmFadeIn)) {
         bgmFilter += `,afade=t=in:ss=0:d=${bgmFadeIn}`;
+        console.log(`[AudioMixer] Adding BGM fade in: ${bgmFadeIn}s`);
       }
-      if (bgmFadeOut > 0) {
+      if (bgmFadeOut > 0 && !isNaN(bgmFadeOut)) {
         const fadeStart = Math.max(0, videoDuration - bgmFadeOut);
-        bgmFilter += `,afade=t=out:st=${fadeStart}:d=${bgmFadeOut}`;
+        if (!isNaN(fadeStart)) {
+          bgmFilter += `,afade=t=out:st=${fadeStart}:d=${bgmFadeOut}`;
+          console.log(`[AudioMixer] Adding BGM fade out: ${bgmFadeOut}s at ${fadeStart}s`);
+        }
       }
       
-      // Use atrim to match video duration - remove invalid apad option
-      bgmFilter += `,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[bgm]`;
+      // Simple trim to match video duration
+      if (videoDuration > 0 && !isNaN(videoDuration)) {
+        bgmFilter += `,atrim=0:${videoDuration}[bgm]`;
+      } else {
+        bgmFilter += `[bgm]`;
+      }
 
+      console.log(`[AudioMixer] BGM filter: ${bgmFilter}`);
       filters.push(bgmFilter);
       inputs.push('[bgm]');
       inputIndex++;
@@ -75,14 +86,19 @@ export class AudioMixer implements IAudioMixer {
       const narrationVolume = config.narrationVolume / 100;
       const delay = config.narrationDelay * 1000; // Convert to milliseconds
 
+      console.log(`[AudioMixer] Processing Narration - Volume: ${narrationVolume}, Delay: ${delay}ms`);
+
       let narrationFilter = `[${inputIndex}:a]volume=${narrationVolume}`;
 
-      // Add delay if specified
-      if (delay > 0) {
+      // Add delay if specified and value is valid
+      if (delay > 0 && !isNaN(delay)) {
         narrationFilter += `,adelay=${delay}|${delay}`;
+        console.log(`[AudioMixer] Adding narration delay: ${delay}ms`);
       }
 
       narrationFilter += '[narration]';
+      
+      console.log(`[AudioMixer] Narration filter: ${narrationFilter}`);
       filters.push(narrationFilter);
       inputs.push('[narration]');
       inputIndex++;
@@ -96,7 +112,8 @@ export class AudioMixer implements IAudioMixer {
     if (inputs.length === 1) {
       // Only one audio source, just use it directly
       const singleInput = inputs[0];
-      filters.push(`${singleInput}acopy[mixed]`);
+      // Remove 'acopy' as it might not be recognized in some FFmpeg versions
+      filters.push(`${singleInput}anull[mixed]`);
     } else {
       // Mix multiple audio sources
       // Use 'longest' to ensure BGM continues for entire video duration
@@ -104,7 +121,7 @@ export class AudioMixer implements IAudioMixer {
       
       // Simple mix without problematic options that may not be supported
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:dropout_transition=2[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest[mixed]`,
       );
     }
 

@@ -408,6 +408,71 @@ export class SbRender implements INodeType {
       },
 
       {
+        displayName: 'Subtitle Source',
+        name: 'subtitleSource',
+        type: 'options',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+          },
+        },
+        options: [
+          {
+            name: 'Manual Input',
+            value: 'manual',
+          },
+          {
+            name: 'SRT File (URL)',
+            value: 'srt_url',
+          },
+          {
+            name: 'SRT File (Binary)',
+            value: 'srt_binary',
+          },
+        ],
+        default: 'manual',
+        description: 'Source of subtitle data',
+      },
+
+      {
+        displayName: 'SRT File URL',
+        name: 'srtFileUrl',
+        type: 'string',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+            subtitleSource: ['srt_url'],
+          },
+        },
+        default: '',
+        placeholder: 'https://example.com/subtitles.srt',
+        required: true,
+        description: 'URL of the SRT subtitle file',
+      },
+
+      {
+        displayName: 'SRT Binary Property',
+        name: 'srtBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+            subtitleSource: ['srt_binary'],
+          },
+        },
+        default: 'data',
+        required: true,
+        placeholder: 'data',
+        description: 'Name of the binary property containing the SRT file',
+      },
+
+      {
         displayName: 'Subtitles',
         name: 'subtitles',
         placeholder: 'Add Subtitle',
@@ -420,6 +485,7 @@ export class SbRender implements INodeType {
             resource: ['Video'],
             operation: ['Render'],
             enableSubtitles: [true],
+            subtitleSource: ['manual'],
           },
         },
         default: {},
@@ -1270,8 +1336,43 @@ export class SbRender implements INodeType {
 
             // 5. Generate subtitles if enabled
             let subtitlePath: string | null = null;
-            if (params.enableSubtitles && params.subtitles?.subtitle) {
-              const subtitleArray = params.subtitles.subtitle;
+            if (params.enableSubtitles) {
+              const subtitleSource = this.getNodeParameter('subtitleSource', itemIndex, 'manual') as 'manual' | 'srt_url' | 'srt_binary';
+              let subtitleArray: ISubtitleConfig[] = [];
+
+              if (subtitleSource === 'manual') {
+                // Use manual subtitle input
+                const subtitles = params.subtitles?.subtitle;
+                if (subtitles && subtitles.length > 0) {
+                  subtitleArray = subtitles;
+                }
+              } else if (subtitleSource === 'srt_url') {
+                // Download SRT file from URL
+                const srtFileUrl = this.getNodeParameter('srtFileUrl', itemIndex) as string;
+                if (srtFileUrl) {
+                  const srtFilePath = await fileManager.downloadFile(srtFileUrl);
+                  const srtContent = await fileManager.readFileAsText(srtFilePath);
+                  subtitleArray = subtitleEngine.parseSRT(srtContent);
+                }
+              } else if (subtitleSource === 'srt_binary') {
+                // Extract SRT file from binary data
+                const srtBinaryProperty = this.getNodeParameter('srtBinaryProperty', itemIndex, 'data') as string;
+                try {
+                  this.helpers.assertBinaryData(itemIndex, srtBinaryProperty);
+                  const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, srtBinaryProperty);
+                  const srtContent = buffer.toString('utf-8');
+                  subtitleArray = subtitleEngine.parseSRT(srtContent);
+                } catch (error) {
+                  const item = this.getInputData()[itemIndex];
+                  const availableProperties = item.binary ? Object.keys(item.binary) : [];
+                  const errorMsg = availableProperties.length > 0
+                    ? `Binary property "${srtBinaryProperty}" not found. Available properties: ${availableProperties.join(', ')}`
+                    : `No binary data found in input item ${itemIndex}`;
+                  throw new NodeOperationError(this.getNode(), errorMsg, { itemIndex });
+                }
+              }
+
+              // Generate ASS file from subtitle array
               if (subtitleArray.length > 0) {
                 const assContent = subtitleEngine.generateASS(
                   subtitleArray,

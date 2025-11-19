@@ -54,6 +54,17 @@ export class FileManager implements IFileManager {
   }
 
   /**
+   * Read file content as text (UTF-8)
+   */
+  async readFileAsText(filePath: string): Promise<string> {
+    try {
+      return await fs.readFile(filePath, 'utf-8');
+    } catch (error) {
+      throw new Error(`Failed to read file as text: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Create temporary file path with extension
    */
   async createTempFile(extension: string): Promise<string> {

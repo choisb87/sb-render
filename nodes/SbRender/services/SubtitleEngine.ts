@@ -271,6 +271,87 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
   }
 
   /**
+   * Parse SRT file content and convert to ISubtitleConfig array
+   * @param srtContent - Content of the SRT file as string
+   * @param defaultConfig - Default styling configuration for subtitles
+   */
+  parseSRT(srtContent: string, defaultConfig?: Partial<ISubtitleConfig>): ISubtitleConfig[] {
+    const subtitles: ISubtitleConfig[] = [];
+
+    // Default configuration for SRT-based subtitles
+    const config = {
+      position: 'bottom' as const,
+      fontSize: 48,
+      fontColor: '#FFFFFF',
+      fontFamily: 'NanumGothic',
+      alignment: 'center' as const,
+      backgroundColor: '#000000',
+      backgroundOpacity: 80,
+      borderColor: '#000000',
+      borderWidth: 2,
+      ...defaultConfig,
+    };
+
+    // Split into blocks by double newline
+    const blocks = srtContent.trim().split(/\n\s*\n/);
+
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+
+      if (lines.length < 3) {
+        continue; // Skip invalid blocks
+      }
+
+      // Line 0: Index (we ignore this)
+      // Line 1: Timestamp
+      // Line 2+: Text content
+
+      const timestampLine = lines[1];
+      const textLines = lines.slice(2);
+
+      // Parse timestamp: "00:00:01,000 --> 00:00:05,000"
+      const timestampMatch = timestampLine.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+
+      if (!timestampMatch) {
+        console.warn(`Failed to parse timestamp: ${timestampLine}`);
+        continue;
+      }
+
+      const startTime = this.parseSRTTimestamp(
+        parseInt(timestampMatch[1]),
+        parseInt(timestampMatch[2]),
+        parseInt(timestampMatch[3]),
+        parseInt(timestampMatch[4])
+      );
+
+      const endTime = this.parseSRTTimestamp(
+        parseInt(timestampMatch[5]),
+        parseInt(timestampMatch[6]),
+        parseInt(timestampMatch[7]),
+        parseInt(timestampMatch[8])
+      );
+
+      const text = textLines.join('\n');
+
+      subtitles.push({
+        text,
+        startTime,
+        endTime,
+        ...config,
+      });
+    }
+
+    return subtitles;
+  }
+
+  /**
+   * Convert SRT timestamp components to seconds
+   */
+  private parseSRTTimestamp(hours: number, minutes: number, seconds: number, milliseconds: number): number {
+    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+  }
+
+  /**
    * Validate subtitle configuration
    */
   validateSubtitles(subtitles: ISubtitleConfig[]): void {

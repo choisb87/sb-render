@@ -348,9 +348,9 @@ export class VideoComposer implements IVideoComposer {
 
         // Check if audio stream is valid (has codec and channels)
         const hasValidAudio = !!audioStream &&
-                             !!audioStream.codec_name &&
-                             audioStream.codec_name !== 'none' &&
-                             (audioStream.channels ?? 0) > 0;
+          !!audioStream.codec_name &&
+          audioStream.codec_name !== 'none' &&
+          (audioStream.channels ?? 0) > 0;
 
         console.log(`[Metadata] hasValidAudio: ${hasValidAudio}`);
         debugLog(`[Metadata] hasValidAudio: ${hasValidAudio}`);
@@ -422,23 +422,32 @@ export class VideoComposer implements IVideoComposer {
       return buffer;
     }
 
-    // Check if videos have audio streams
-    const hasAudio = await Promise.all(
+    // Get metadata for all videos
+    const videoMetadataList = await Promise.all(
       videoPaths.map(async (videoPath, index) => {
         try {
           const metadata = await this.getVideoMetadata(videoPath);
-          console.log(`[Merge] Video ${index} audio check:`, {
+          console.log(`[Merge] Video ${index} metadata:`, {
             path: videoPath,
             hasAudio: metadata.hasAudio,
-            audioCodec: metadata.audioCodec
+            duration: metadata.duration
           });
-          return metadata.hasAudio;
+          return metadata;
         } catch (error) {
-          console.warn(`[Merge] Failed to check audio for video ${index}:`, error);
-          return false;
+          console.warn(`[Merge] Failed to get metadata for video ${index}:`, error);
+          // Return safe default
+          return {
+            hasAudio: false,
+            duration: 0,
+            width: 1920,
+            height: 1080,
+            videoCodec: 'unknown'
+          } as IVideoMetadata;
         }
       })
     );
+
+    const hasAudio = videoMetadataList.map(m => m.hasAudio);
 
     const allHaveAudio = hasAudio.every(has => has);
     const audioSummary = {
@@ -461,18 +470,44 @@ export class VideoComposer implements IVideoComposer {
         // Normalize all videos to same resolution and framerate before concat
         // This ensures compatibility when mixing videos from different sources
         let filterString: string;
-        if (allHaveAudio) {
-          // All videos have audio - normalize video only, use original audio streams
+
+        // Check if we have mixed audio (some have audio, some don't)
+        const hasMixedAudio = !allHaveAudio && hasAudio.some(has => has);
+
+        if (allHaveAudio || hasMixedAudio) {
+          // All videos have audio OR mixed audio - normalize video and ensure audio for all
           const scaleFilters = videoPaths.map((_, index) =>
             `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
           ).join(';');
 
-          // Build concat inputs: video and audio streams in pairs (use original audio streams directly)
-          const concatInputs = videoPaths.map((_, index) => `[v${index}][${index}:a]`).join('');
+          // Prepare audio streams
+          const audioStreams: string[] = [];
+          let audioFilters = '';
 
-          filterString = `${scaleFilters};${concatInputs}concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
+          videoPaths.forEach((_, index) => {
+            if (hasAudio[index]) {
+              // Use original audio
+              audioStreams.push(`[${index}:a]`);
+            } else {
+              // Generate silent audio for this video using anullsrc
+              // We use the video duration to trim the silence
+              const duration = videoMetadataList[index].duration;
+              // anullsrc generates infinite silence, we trim it to video duration
+              // We use a unique label for this silence stream
+              audioFilters += `anullsrc=r=44100:cl=stereo,atrim=duration=${duration}[silence${index}];`;
+              audioStreams.push(`[silence${index}]`);
+            }
+          });
+
+          // Combine scale filters and audio filters
+          const allFilters = scaleFilters + ';' + audioFilters;
+
+          // Build concat inputs: video and audio streams in pairs
+          const concatInputs = videoPaths.map((_, index) => `[v${index}]${audioStreams[index]}`).join('');
+
+          filterString = `${allFilters}${concatInputs}concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
         } else {
-          // Some videos don't have audio - normalize and concat video only
+          // No videos have audio - normalize and concat video only
           const scaleFilters = videoPaths.map((_, index) =>
             `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
           ).join(';');
@@ -488,7 +523,7 @@ export class VideoComposer implements IVideoComposer {
         // Map output streams FIRST (must come before codec options for FFmpeg)
         const crf = this.getCRF(quality, customCRF);
 
-        if (allHaveAudio) {
+        if (allHaveAudio || hasMixedAudio) {
           console.log(`[Merge] Mapping both video and audio outputs`);
           debugLog(`[Merge] Mapping both video and audio outputs`);
           command.outputOptions([
@@ -511,6 +546,7 @@ export class VideoComposer implements IVideoComposer {
             '-movflags', '+faststart',
           ]);
         }
+
 
         command
           .format(outputFormat)

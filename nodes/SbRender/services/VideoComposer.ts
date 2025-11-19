@@ -83,22 +83,32 @@ export class VideoComposer implements IVideoComposer {
         // Set output codec and quality
         const crf = this.getCRF(config.quality || 'high', config.customCRF);
 
+        // Map video and audio streams
+        const outputOptions = [
+          '-map 0:v',  // Map video from input
+          `-crf ${crf}`,
+          '-preset medium',
+          '-movflags +faststart', // Enable streaming
+        ];
+
+        // Add audio mapping if input has audio
+        if (audioPath) {
+          // Already mixed audio - this path shouldn't be used with subtitles only
+          outputOptions.splice(1, 0, '-map 0:a');
+        } else {
+          // Check if original video has audio and map it
+          // When adding subtitles only, preserve original audio
+          outputOptions.splice(1, 0, '-map 0:a?');  // ? makes it optional
+        }
+
         command
           .videoCodec(config.videoCodec || 'libx264')
-          .outputOptions([
-            `-crf ${crf}`,
-            '-preset medium',
-            '-movflags +faststart', // Enable streaming
-          ]);
+          .outputOptions(outputOptions);
 
-        // Audio codec
-        if (audioPath) {
-          command
-            .audioCodec('aac')
-            .audioBitrate('192k');
-        } else {
-          command.noAudio();
-        }
+        // Audio codec - always set for videos with audio
+        command
+          .audioCodec('aac')
+          .audioBitrate('192k');
 
         // Set output format
         command.format(config.outputFormat || 'mp4');
@@ -217,12 +227,6 @@ export class VideoComposer implements IVideoComposer {
           command.videoFilters(videoFilters);
         }
 
-        // Map video and mixed audio
-        command.outputOptions([
-          '-map 0:v',
-          audioFilterChain ? '-map [mixed]' : '',
-        ].filter(Boolean));
-
         // Set output codec and quality
         const crf = this.getCRF(config.quality || 'high', config.customCRF);
 
@@ -235,6 +239,15 @@ export class VideoComposer implements IVideoComposer {
         // Add explicit frame rate for half frame rate mode to ensure proper playback
         if (config.halfFrameRate) {
           outputOptions.push('-r 24');
+        }
+
+        // Map video and mixed audio
+        if (audioFilterChain) {
+          // BGM/나레이션 믹싱이 있는 경우
+          outputOptions.unshift('-map [mixed]', '-map 0:v');
+        } else {
+          // 자막만 추가하는 경우 - 원본 오디오 보존
+          outputOptions.unshift('-map 0:a?', '-map 0:v');
         }
 
         command

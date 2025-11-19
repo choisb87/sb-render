@@ -456,9 +456,9 @@ export class SbRender implements INodeType {
           },
         },
         default: '',
-        placeholder: '1\n00:00:00,000 --> 00:00:05,000\nFirst subtitle text\n\n2\n00:00:05,000 --> 00:00:10,000\nSecond subtitle text',
+        placeholder: '1\n00:00:00,000 --> 00:00:05,000\n첫 번째 자막\n\n2\n00:00:05,000 --> 00:00:10,000\n두 번째 자막\n\n3\n00:00:10,000 --> 00:00:15,000\n세 번째 자막',
         required: true,
-        description: 'SRT format subtitle content as string',
+        description: 'SRT format subtitle content. Timestamp format: HH:MM:SS,mmm (e.g., 00:00:05,000 for 5 seconds). Short format MM:SS,mmm (e.g., 00:05,000) is also supported and will be converted automatically.',
       },
 
       {

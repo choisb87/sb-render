@@ -275,7 +275,7 @@ export class VideoComposer implements IVideoComposer {
         }
 
         // Map video and mixed audio
-        if (audioFilterChain) {
+        if (finalAudioFilterChain) {
           // BGM/나레이션 믹싱이 있는 경우
           outputOptions.unshift('-map [mixed]', '-map 0:v');
         } else {

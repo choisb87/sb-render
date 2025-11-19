@@ -21,11 +21,13 @@ function debugLog(message: string): void {
 try {
   ffmpeg.setFfmpegPath(ffmpegInstaller.path);
   ffmpeg.setFfprobePath(ffprobeInstaller.path);
-  console.log(`[VideoComposer] FFmpeg path set: ${ffmpegInstaller.path}`);
-  console.log(`[VideoComposer] FFprobe path set: ${ffprobeInstaller.path}`);
+  console.log(`[VideoComposer] FFmpeg path: ${ffmpegInstaller.path}`);
+  console.log(`[VideoComposer] FFprobe path: ${ffprobeInstaller.path}`);
+  debugLog(`[VideoComposer] FFmpeg path set: ${ffmpegInstaller.path}`);
+  debugLog(`[VideoComposer] FFprobe path set: ${ffprobeInstaller.path}`);
 } catch (error) {
   console.error('[VideoComposer] Failed to set FFmpeg/FFprobe paths:', error);
-  // Fallback logic if needed
+  debugLog(`[VideoComposer] Path setting error: ${error}`);
 }
 
 /**
@@ -307,31 +309,36 @@ export class VideoComposer implements IVideoComposer {
       debugLog(`${logMsg}`);
 
       // Try to use ffprobe
-      // Ensure path is set (redundant but safe)
+      // Ensure path is set in case n8n environment is different
       try {
         ffmpeg.setFfprobePath(ffprobeInstaller.path);
+        debugLog(`[Metadata] FFprobe path reconfirmed: ${ffprobeInstaller.path}`);
       } catch (e) {
-        // Ignore if already set
+        console.warn('[Metadata] Could not set ffprobe path:', e);
+        debugLog(`[Metadata] FFprobe path setting failed: ${e}`);
       }
 
       ffmpeg.ffprobe(videoPath, (error, metadata) => {
         if (error) {
-          // If ffprobe fails, return default metadata
+          // CRITICAL: If ffprobe fails in n8n, it's likely a path/permission issue
+          // NOT that the video lacks audio. Safer to assume audio EXISTS.
           console.error('[Metadata] ❌ ffprobe failed for:', videoPath);
-          console.error('[Metadata] Error details:', error.message);
+          console.error('[Metadata] Error:', error.message);
+          console.error('[Metadata] Error code:', error.code || 'unknown');
+          debugLog(`[Metadata] ❌ FFPROBE FAILED: ${videoPath}`);
+          debugLog(`[Metadata] Error: ${error.message}`);
+          debugLog(`[Metadata] Assuming audio EXISTS to prevent loss`);
 
-          // Fallback: Try to guess from file extension or assume audio exists?
-          // No, assuming audio exists causes crash if it doesn't.
-          // Assuming no audio causes silence.
-          // We will stick to no audio but log LOUDLY.
-
+          // CHANGED: Assume audio EXISTS when probe fails
+          // This prevents audio loss in n8n when ffprobe has issues
+          // Better to have potential duplicate audio than lose it entirely
           resolve({
             duration: 10, // Default 10 seconds
             width: 1920,
             height: 1080,
-            hasAudio: false, // Assume no audio to avoid stream errors
+            hasAudio: true, // ASSUME audio exists to preserve it
             videoCodec: 'unknown',
-            audioCodec: undefined,
+            audioCodec: 'aac', // Assume common codec
           });
           return;
         }

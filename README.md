@@ -66,6 +66,7 @@ Compose a video with optional background music, narration, and subtitles.
 - ✅ Customizable subtitle positioning and styling
 - ✅ Multiple output formats (MP4, MOV, WebM)
 - ✅ Quality presets (Low, Medium, High, Custom)
+- ✅ Smart audio merging (handles mixed audio/silent video inputs)
 
 ## Configuration
 
@@ -107,7 +108,7 @@ Compose a video with optional background music, narration, and subtitles.
 | **Start Time** | Number | - | Start time in seconds |
 | **End Time** | Number | - | End time in seconds |
 | **Position** | Options | bottom | `top`, `middle`, `bottom`, `custom` |
-| **Font Size** | Number | 48 | Text size |
+| **Font Size** | Number | 90 | Text size |
 | **Font Color** | Color | #FFFFFF | Text color (hex) |
 | **Font Family** | String | Arial | Font name |
 | **Alignment** | Options | center | `left`, `center`, `right` |

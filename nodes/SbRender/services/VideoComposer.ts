@@ -1,4 +1,4 @@
-import { promises as fs, appendFileSync } from 'fs';
+import { promises as fs, appendFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
@@ -17,17 +17,36 @@ function debugLog(message: string): void {
   }
 }
 
-// Set FFmpeg and FFprobe paths
+// Set FFmpeg and FFprobe paths with validation
 try {
-  ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-  ffmpeg.setFfprobePath(ffprobeInstaller.path);
-  console.log(`[VideoComposer] FFmpeg path: ${ffmpegInstaller.path}`);
-  console.log(`[VideoComposer] FFprobe path: ${ffprobeInstaller.path}`);
-  debugLog(`[VideoComposer] FFmpeg path set: ${ffmpegInstaller.path}`);
-  debugLog(`[VideoComposer] FFprobe path set: ${ffprobeInstaller.path}`);
+  const ffmpegPath = ffmpegInstaller.path;
+  const ffprobePath = ffprobeInstaller.path;
+
+  // Validate that binaries actually exist (critical for n8n environment)
+  if (!existsSync(ffmpegPath)) {
+    console.error(`[VideoComposer] FFmpeg binary not found at: ${ffmpegPath}`);
+    debugLog(`[VideoComposer] FFmpeg binary missing: ${ffmpegPath}`);
+    throw new Error(`FFmpeg binary not found at ${ffmpegPath}`);
+  }
+
+  if (!existsSync(ffprobePath)) {
+    console.error(`[VideoComposer] FFprobe binary not found at: ${ffprobePath}`);
+    debugLog(`[VideoComposer] FFprobe binary missing: ${ffprobePath}`);
+    throw new Error(`FFprobe binary not found at ${ffprobePath}`);
+  }
+
+  // Both binaries exist, set paths
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  ffmpeg.setFfprobePath(ffprobePath);
+  console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegPath}`);
+  console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobePath}`);
+  debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegPath}`);
+  debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobePath}`);
 } catch (error) {
-  console.error('[VideoComposer] Failed to set FFmpeg/FFprobe paths:', error);
-  debugLog(`[VideoComposer] Path setting error: ${error}`);
+  console.error('[VideoComposer] CRITICAL: Failed to initialize FFmpeg/FFprobe:', error);
+  debugLog(`[VideoComposer] Initialization error: ${error}`);
+  // Don't throw - allow code to continue but log the error
+  // This matches the "assume audio exists" strategy on probe failure
 }
 
 /**

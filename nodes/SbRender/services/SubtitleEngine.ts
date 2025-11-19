@@ -276,22 +276,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
    */
   private normalizeTimestamp(timestamp: string): string {
     const trimmed = timestamp.trim();
-    
+
     // MM:SS,mmm 형식만 변환 (정확히 2:2:3 자릿수)
     // HH:MM:SS,mmm 형식은 변환하지 않음
     const mmSsPattern = /^(\d{2}):(\d{2}),(\d{3})$/;
     const hhMmSsPattern = /^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/;
-    
+
     // HH:MM:SS,mmm 형식이면 그대로 반환
     if (hhMmSsPattern.test(trimmed)) {
       return trimmed;
     }
-    
+
     // MM:SS,mmm 형식이면 00:MM:SS,mmm로 변환
     if (mmSsPattern.test(trimmed)) {
       return `00:${trimmed}`;
     }
-    
+
     // 그 외 형식은 그대로 반환
     return trimmed;
   }
@@ -307,7 +307,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     // Default configuration for SRT-based subtitles
     const config = {
       position: 'bottom' as const,
-      fontSize: 70,
+      fontSize: 90,
       fontColor: '#FFFFFF',
       fontFamily: 'NanumGothic',
       alignment: 'center' as const,
@@ -337,7 +337,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
       // Parse timestamp: "00:00:01,000 --> 00:00:05,000" or "00:01,000 --> 00:05,000"
       const timeMatch = timestampLine.match(/^(.+?)\s+-->\s+(.+)$/);
-      
+
       if (!timeMatch) {
         console.warn(`Failed to parse timestamp line: ${timestampLine}`);
         continue;
@@ -386,7 +386,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     for (let i = 0; i < subtitles.length - 1; i++) {
       const current = subtitles[i];
       const next = subtitles[i + 1];
-      
+
       // 현재 자막의 종료 시간이 다음 자막의 시작 시간보다 늦으면
       if (current.endTime > next.startTime) {
         // 다음 자막 시작 0.1초 전으로 조정

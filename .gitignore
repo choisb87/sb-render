@@ -43,4 +43,4 @@ pnpm-lock.yaml
 
 # Deployment scripts (local only)
 deploy.sh
-update-n8n-package.sh
+

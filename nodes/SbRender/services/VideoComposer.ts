@@ -200,6 +200,31 @@ export class VideoComposer implements IVideoComposer {
         if (narrationPath) {
           command.input(narrationPath);
         }
+
+        // Generate audio filter chain if not provided
+        let finalAudioFilterChain = audioFilterChain;
+        if (!finalAudioFilterChain && (bgmPath || narrationPath)) {
+          // Import AudioMixer dynamically to avoid circular dependency
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { AudioMixer } = require('./AudioMixer');
+          const audioMixer = new AudioMixer();
+
+          const audioConfig = {
+            videoDuration,
+            bgmPath: bgmPath || undefined,
+            bgmVolume: config.bgmVolume || 30,
+            bgmFadeIn: config.bgmFadeIn || 0,
+            bgmFadeOut: config.bgmFadeOut || 0,
+            narrationPath: narrationPath || undefined,
+            narrationVolume: config.narrationVolume || 100,
+            narrationDelay: config.narrationDelay || 0,
+          };
+
+          finalAudioFilterChain = audioMixer.getAudioFilterChain(audioConfig, videoMetadata.hasAudio);
+          console.log(`[ComposeAudioMix] Generated filter chain: ${finalAudioFilterChain}`);
+        }
+
+        // Apply complex audio filter
         if (finalAudioFilterChain) {
           command.complexFilter(finalAudioFilterChain);
         }

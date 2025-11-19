@@ -42,7 +42,8 @@ export interface ISbRenderNodeParams {
 
   // Subtitle Configuration
   enableSubtitles?: boolean;
-  subtitleSource?: 'manual' | 'srt_url' | 'srt_binary';
+  subtitleSource?: 'manual' | 'srt_string' | 'srt_url' | 'srt_binary';
+  srtContent?: string;
   srtFileUrl?: string;
   srtBinaryProperty?: string;
   subtitles?: { subtitle?: ISubtitleConfig[] };

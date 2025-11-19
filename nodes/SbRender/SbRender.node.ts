@@ -424,6 +424,10 @@ export class SbRender implements INodeType {
             value: 'manual',
           },
           {
+            name: 'SRT String',
+            value: 'srt_string',
+          },
+          {
             name: 'SRT File (URL)',
             value: 'srt_url',
           },
@@ -434,6 +438,27 @@ export class SbRender implements INodeType {
         ],
         default: 'manual',
         description: 'Source of subtitle data',
+      },
+
+      {
+        displayName: 'SRT Content',
+        name: 'srtContent',
+        type: 'string',
+        typeOptions: {
+          rows: 10,
+        },
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+            subtitleSource: ['srt_string'],
+          },
+        },
+        default: '',
+        placeholder: '1\n00:00:00,000 --> 00:00:05,000\nFirst subtitle text\n\n2\n00:00:05,000 --> 00:00:10,000\nSecond subtitle text',
+        required: true,
+        description: 'SRT format subtitle content as string',
       },
 
       {
@@ -1337,7 +1362,7 @@ export class SbRender implements INodeType {
             // 5. Generate subtitles if enabled
             let subtitlePath: string | null = null;
             if (params.enableSubtitles) {
-              const subtitleSource = this.getNodeParameter('subtitleSource', itemIndex, 'manual') as 'manual' | 'srt_url' | 'srt_binary';
+              const subtitleSource = this.getNodeParameter('subtitleSource', itemIndex, 'manual') as 'manual' | 'srt_string' | 'srt_url' | 'srt_binary';
               let subtitleArray: ISubtitleConfig[] = [];
 
               if (subtitleSource === 'manual') {
@@ -1345,6 +1370,12 @@ export class SbRender implements INodeType {
                 const subtitles = params.subtitles?.subtitle;
                 if (subtitles && subtitles.length > 0) {
                   subtitleArray = subtitles;
+                }
+              } else if (subtitleSource === 'srt_string') {
+                // Parse SRT content from string input
+                const srtContent = this.getNodeParameter('srtContent', itemIndex) as string;
+                if (srtContent) {
+                  subtitleArray = subtitleEngine.parseSRT(srtContent);
                 }
               } else if (subtitleSource === 'srt_url') {
                 // Download SRT file from URL

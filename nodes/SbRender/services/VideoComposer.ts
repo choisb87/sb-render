@@ -191,13 +191,9 @@ export class VideoComposer implements IVideoComposer {
       try {
         const command = ffmpeg(videoPath);
 
-        // Add BGM input with stream loop for memory efficiency
-        // Loop infinitely and trim to video duration at input level
+        // Add BGM input (will be looped in filter chain)
         if (bgmPath) {
-          command.input(bgmPath).inputOptions([
-            '-stream_loop', '-1',
-            '-t', videoDuration.toString()
-          ]);
+          command.input(bgmPath);
         }
 
         // Add narration input

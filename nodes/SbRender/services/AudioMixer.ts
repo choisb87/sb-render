@@ -34,13 +34,15 @@ export class AudioMixer implements IAudioMixer {
       inputs.push('[original]');
     }
 
-    // Handle BGM
+    //Handle BGM with filter-based looping
     if (config.bgmPath) {
       const bgmVolume = config.bgmVolume / 100;
+      const videoDuration = config.videoDuration;
 
-      // BGM is already looped and trimmed at input level (-stream_loop -1 -t duration)
-      // Just apply volume and reset timestamps
-      const bgmFilter = `[${inputIndex}:a]asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
+      // Use aloop filter to repeat BGM indefinitely, then trim to video duration
+      // This is more reliable than input-level stream_loop
+      // aloop=-1 means infinite loop, atrim cuts to exact video duration
+      const bgmFilter = `[${inputIndex}:a]asetpts=PTS-STARTPTS,aloop=loop=-1:size=2e+09,atrim=0:${videoDuration},asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
 
       filters.push(bgmFilter);
       inputs.push('[bgm]');

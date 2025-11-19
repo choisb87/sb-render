@@ -1,8 +1,8 @@
 import { promises as fs, appendFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { accessSync } from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../interfaces';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
@@ -17,25 +17,15 @@ function debugLog(message: string): void {
   }
 }
 
-// Set FFmpeg path
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-
-// Set FFprobe path - try multiple sources
+// Set FFmpeg and FFprobe paths
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
+  ffmpeg.setFfmpegPath(ffmpegInstaller.path);
   ffmpeg.setFfprobePath(ffprobeInstaller.path);
+  console.log(`[VideoComposer] FFmpeg path set: ${ffmpegInstaller.path}`);
+  console.log(`[VideoComposer] FFprobe path set: ${ffprobeInstaller.path}`);
 } catch (error) {
-  // If @ffprobe-installer is not available, try to find ffprobe in the same directory as ffmpeg
-  const ffmpegDir = dirname(ffmpegInstaller.path);
-  const ffprobePath = join(ffmpegDir, 'ffprobe');
-  try {
-    accessSync(ffprobePath);
-    ffmpeg.setFfprobePath(ffprobePath);
-  } catch {
-    // ffprobe will need to be in system PATH
-    console.warn('ffprobe not found in package, will try system PATH');
-  }
+  console.error('[VideoComposer] Failed to set FFmpeg/FFprobe paths:', error);
+  // Fallback logic if needed
 }
 
 /**
@@ -317,14 +307,24 @@ export class VideoComposer implements IVideoComposer {
       debugLog(`${logMsg}`);
 
       // Try to use ffprobe
+      // Ensure path is set (redundant but safe)
+      try {
+        ffmpeg.setFfprobePath(ffprobeInstaller.path);
+      } catch (e) {
+        // Ignore if already set
+      }
+
       ffmpeg.ffprobe(videoPath, (error, metadata) => {
         if (error) {
           // If ffprobe fails, return default metadata
           console.error('[Metadata] ❌ ffprobe failed for:', videoPath);
           console.error('[Metadata] Error details:', error.message);
-          console.error('[Metadata] Full error:', JSON.stringify(error, null, 2));
-          debugLog(`[Metadata] ❌ ffprobe FAILED for: ${videoPath}`);
-          debugLog(`[Metadata] Error: ${error.message}`);
+
+          // Fallback: Try to guess from file extension or assume audio exists?
+          // No, assuming audio exists causes crash if it doesn't.
+          // Assuming no audio causes silence.
+          // We will stick to no audio but log LOUDLY.
+
           resolve({
             duration: 10, // Default 10 seconds
             width: 1920,

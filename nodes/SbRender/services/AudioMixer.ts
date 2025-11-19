@@ -38,10 +38,25 @@ export class AudioMixer implements IAudioMixer {
     if (config.bgmPath) {
       const bgmVolume = config.bgmVolume / 100;
       const videoDuration = config.videoDuration;
+      const bgmFadeIn = config.bgmFadeIn || 0;
+      const bgmFadeOut = config.bgmFadeOut || 0;
 
       // BGM is looped at input level with stream_loop
-      // Here we just apply volume and trim to video duration
-      const bgmFilter = `[${inputIndex}:a]atrim=0:${videoDuration},asetpts=PTS-STARTPTS,volume=${bgmVolume}[bgm]`;
+      // Apply volume, fade effects, and ensure it matches video duration
+      let bgmFilter = `[${inputIndex}:a]volume=${bgmVolume}`;
+      
+      // Add fade effects if specified
+      if (bgmFadeIn > 0) {
+        bgmFilter += `,afade=t=in:ss=0:d=${bgmFadeIn}`;
+      }
+      if (bgmFadeOut > 0) {
+        const fadeStart = Math.max(0, videoDuration - bgmFadeOut);
+        bgmFilter += `,afade=t=out:st=${fadeStart}:d=${bgmFadeOut}`;
+      }
+      
+      // Use apad instead of atrim for better duration handling
+      // This ensures BGM continues for the entire video even if slightly longer
+      bgmFilter += `,apad=pad_dur=${videoDuration},atrim=0:${videoDuration},asetpts=PTS-STARTPTS[bgm]`;
 
       filters.push(bgmFilter);
       inputs.push('[bgm]');
@@ -78,10 +93,13 @@ export class AudioMixer implements IAudioMixer {
     } else {
       // Mix multiple audio sources
       // Use 'longest' to ensure BGM continues for entire video duration
-      // BGM is already looped and trimmed to video duration at input level
       const mixInputs = inputs.join('');
+      const videoDuration = config.videoDuration;
+      
+      // Ensure all inputs are padded to video duration before mixing
+      // This prevents audio cutoff issues in n8n environment
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:dropout_transition=2,dynaudnorm[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=first:dropout_transition=2,apad=pad_dur=${videoDuration},atrim=0:${videoDuration},dynaudnorm[mixed]`,
       );
     }
 

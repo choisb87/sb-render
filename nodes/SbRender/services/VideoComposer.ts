@@ -26,27 +26,54 @@ try {
   if (!existsSync(ffmpegPath)) {
     console.error(`[VideoComposer] FFmpeg binary not found at: ${ffmpegPath}`);
     debugLog(`[VideoComposer] FFmpeg binary missing: ${ffmpegPath}`);
-    throw new Error(`FFmpeg binary not found at ${ffmpegPath}`);
+    
+    // Try system ffmpeg as fallback
+    try {
+      ffmpeg.setFfmpegPath('ffmpeg');
+      console.warn('[VideoComposer] Using system ffmpeg as fallback');
+      debugLog('[VideoComposer] Using system ffmpeg as fallback');
+    } catch (systemError) {
+      throw new Error(`FFmpeg binary not found at ${ffmpegPath} and system ffmpeg unavailable`);
+    }
+  } else {
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegPath}`);
+    debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegPath}`);
   }
 
   if (!existsSync(ffprobePath)) {
     console.error(`[VideoComposer] FFprobe binary not found at: ${ffprobePath}`);
     debugLog(`[VideoComposer] FFprobe binary missing: ${ffprobePath}`);
-    throw new Error(`FFprobe binary not found at ${ffprobePath}`);
+    
+    // Try system ffprobe as fallback
+    try {
+      ffmpeg.setFfprobePath('ffprobe');
+      console.warn('[VideoComposer] Using system ffprobe as fallback');
+      debugLog('[VideoComposer] Using system ffprobe as fallback');
+    } catch (systemError) {
+      console.warn('[VideoComposer] System ffprobe also unavailable, metadata detection will be limited');
+      debugLog('[VideoComposer] System ffprobe unavailable, will use fallback metadata');
+      // Don't throw - we'll handle this gracefully in getVideoMetadata
+    }
+  } else {
+    ffmpeg.setFfprobePath(ffprobePath);
+    console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobePath}`);
+    debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobePath}`);
   }
-
-  // Both binaries exist, set paths
-  ffmpeg.setFfmpegPath(ffmpegPath);
-  ffmpeg.setFfprobePath(ffprobePath);
-  console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegPath}`);
-  console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobePath}`);
-  debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegPath}`);
-  debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobePath}`);
 } catch (error) {
   console.error('[VideoComposer] CRITICAL: Failed to initialize FFmpeg/FFprobe:', error);
   debugLog(`[VideoComposer] Initialization error: ${error}`);
-  // Don't throw - allow code to continue but log the error
-  // This matches the "assume audio exists" strategy on probe failure
+  
+  // Final fallback: try system binaries
+  try {
+    ffmpeg.setFfmpegPath('ffmpeg');
+    ffmpeg.setFfprobePath('ffprobe');
+    console.warn('[VideoComposer] Using system ffmpeg/ffprobe binaries as last resort');
+    debugLog('[VideoComposer] Using system binaries as last resort');
+  } catch (systemError) {
+    console.error('[VideoComposer] No FFmpeg/FFprobe available - operations will be limited');
+    debugLog('[VideoComposer] No FFmpeg available - critical error');
+  }
 }
 
 /**
@@ -172,9 +199,53 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
-    // Get video duration
-    const videoMetadata = await this.getVideoMetadata(videoPath);
+    // Get video duration with better error handling for n8n
+    let videoMetadata: IVideoMetadata;
+    try {
+      videoMetadata = await this.getVideoMetadata(videoPath);
+      console.log(`[ComposeAudioMix] Video metadata: duration=${videoMetadata.duration}s, hasAudio=${videoMetadata.hasAudio}`);
+      debugLog(`[ComposeAudioMix] Video metadata: ${JSON.stringify(videoMetadata)}`);
+    } catch (error) {
+      console.warn('[ComposeAudioMix] Failed to get video metadata, using fallback duration detection');
+      debugLog(`[ComposeAudioMix] Metadata detection failed: ${error}`);
+      
+      // Fallback: Use ffprobe directly on video to get duration
+      try {
+        const fallbackDuration = await this.getFallbackDuration(videoPath);
+        videoMetadata = {
+          duration: fallbackDuration,
+          width: 1920,
+          height: 1080,
+          hasAudio: true, // Assume audio exists in n8n to preserve it
+          videoCodec: 'unknown'
+        };
+        console.log(`[ComposeAudioMix] Using fallback duration: ${fallbackDuration}s`);
+      } catch (fallbackError) {
+        console.warn('[ComposeAudioMix] Fallback duration detection also failed, using 30s default');
+        videoMetadata = {
+          duration: 30, // Conservative default for multiple merged videos
+          width: 1920,
+          height: 1080,
+          hasAudio: true,
+          videoCodec: 'unknown'
+        };
+      }
+    }
+
     const videoDuration = videoMetadata.duration;
+
+    // Get BGM duration if exists
+    let bgmDuration = 0;
+    if (bgmPath) {
+      try {
+        bgmDuration = await this.getAudioDuration(bgmPath);
+        console.log(`[ComposeAudioMix] BGM duration: ${bgmDuration}s, video duration: ${videoDuration}s`);
+        debugLog(`[ComposeAudioMix] BGM duration: ${bgmDuration}s`);
+      } catch (error) {
+        console.warn('Failed to get BGM duration:', error);
+        bgmDuration = 180; // Default 3 minutes
+      }
+    }
 
     // Get narration duration if exists
     let narrationDuration = 0;
@@ -182,6 +253,7 @@ export class VideoComposer implements IVideoComposer {
       try {
         const narrationMetadata = await this.getAudioDuration(narrationPath);
         narrationDuration = narrationMetadata;
+        console.log(`[ComposeAudioMix] Narration duration: ${narrationDuration}s`);
       } catch (error) {
         console.warn('Failed to get narration duration:', error);
       }
@@ -191,11 +263,16 @@ export class VideoComposer implements IVideoComposer {
       try {
         const command = ffmpeg(videoPath);
 
-        // Add BGM input with stream_loop for looping
+        // Add BGM input with better looping strategy
         if (bgmPath) {
+          console.log(`[ComposeAudioMix] Adding BGM input with stream_loop for ${videoDuration}s video`);
+          debugLog(`[ComposeAudioMix] BGM strategy: loop BGM (${bgmDuration}s) for video (${videoDuration}s)`);
+          
+          // Use stream_loop with a safety margin and shortest option in filter
+          // This ensures BGM continues for the entire video duration even if our duration calculation is slightly off
+          const loopCount = Math.ceil(videoDuration / bgmDuration) + 1; // Extra loop for safety
           command.input(bgmPath).inputOptions([
-            '-stream_loop', '-1',
-            '-t', videoDuration.toString()
+            '-stream_loop', loopCount.toString(), // Loop more than needed
           ]);
         }
 
@@ -319,6 +396,32 @@ export class VideoComposer implements IVideoComposer {
       } catch (error) {
         reject(new Error(`Video composition failed: ${error}`));
       }
+    });
+  }
+
+  /**
+   * Get fallback video duration using direct ffprobe call
+   */
+  private async getFallbackDuration(videoPath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      console.log(`[FallbackDuration] Attempting direct ffprobe on: ${videoPath}`);
+      
+      // Try with a simpler ffprobe call
+      ffmpeg.ffprobe(videoPath, [
+        '-v', 'quiet',
+        '-show_entries', 'format=duration',
+        '-of', 'csv=p=0'
+      ], (error, metadata) => {
+        if (error) {
+          console.error('[FallbackDuration] Direct ffprobe also failed:', error);
+          reject(error);
+          return;
+        }
+        
+        const duration = metadata?.format?.duration || 0;
+        console.log(`[FallbackDuration] Detected duration: ${duration}s`);
+        resolve(duration);
+      });
     });
   }
 

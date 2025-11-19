@@ -1345,6 +1345,9 @@ export class SbRender implements INodeType {
             // 4. Generate audio filter chain
             let audioFilterChain = '';
             if (params.enableBGM || params.enableNarration) {
+              console.log(`[SbRender] Setting up audio mix - BGM: ${!!bgmPath}, Narration: ${!!narrationPath}`);
+              console.log(`[SbRender] Video metadata - Duration: ${metadata.duration}s, HasAudio: ${metadata.hasAudio}`);
+              
               const audioConfig: IAudioMixConfig = {
                 videoDuration: metadata.duration,
                 bgmPath: bgmPath || undefined,
@@ -1356,7 +1359,16 @@ export class SbRender implements INodeType {
                 narrationDelay: params.narrationDelay ?? DEFAULT_VALUES.narrationDelay,
               };
 
+              console.log(`[SbRender] Audio config:`, {
+                videoDuration: audioConfig.videoDuration,
+                hasBGM: !!audioConfig.bgmPath,
+                bgmVolume: audioConfig.bgmVolume,
+                hasNarration: !!audioConfig.narrationPath,
+                narrationVolume: audioConfig.narrationVolume
+              });
+
               audioFilterChain = audioMixer.getAudioFilterChain(audioConfig, metadata.hasAudio);
+              console.log(`[SbRender] Generated audio filter chain: ${audioFilterChain}`);
             }
 
             // 5. Generate subtitles if enabled
@@ -1492,6 +1504,21 @@ export class SbRender implements INodeType {
 
             console.log(`[SB Render] Merge operation starting with ${mediaItems.length} items`);
 
+            // Check if BGM should be added to merged video
+            const enableMergeBGM = this.getNodeParameter('enableBGM', itemIndex, false) as boolean;
+            let mergeBgmPath: string | null = null;
+
+            if (enableMergeBGM) {
+              console.log('[SB Render] BGM will be added to merged video');
+              const bgmSource = this.getNodeParameter('bgmSource', itemIndex, 'url') as 'url' | 'binary';
+              mergeBgmPath = await getMediaFile(
+                bgmSource,
+                this.getNodeParameter('bgmUrl', itemIndex, '') as string,
+                this.getNodeParameter('bgmBinaryProperty', itemIndex, 'data') as string,
+                itemIndex,
+              );
+            }
+
             if (!mediaItems || mediaItems.length === 0) {
               throw new NodeOperationError(this.getNode(), 'No media items provided for merging', { itemIndex });
             }
@@ -1537,14 +1564,87 @@ export class SbRender implements INodeType {
 
             // Merge all videos
             console.log('[SB Render] Starting merge...');
-            const videoBuffer = await videoComposer.mergeVideos(
-              videoPaths,
-              outputPath,
-              mergeVideoCodec,
-              mergeQuality,
-              mergeCustomCRF,
-              mergeOutputFormat,
-            );
+            let videoBuffer: Buffer;
+            
+            if (mergeBgmPath) {
+              // Merge videos first, then add BGM in a separate step
+              const tempMergedPath = await fileManager.createTempFile('.mp4');
+              await videoComposer.mergeVideos(
+                videoPaths,
+                tempMergedPath,
+                mergeVideoCodec,
+                mergeQuality,
+                mergeCustomCRF,
+                'mp4', // Use mp4 for intermediate file
+              );
+              
+              // Get metadata of merged video for BGM processing
+              let mergedMetadata: IVideoMetadata;
+              try {
+                mergedMetadata = await videoComposer.getVideoMetadata(tempMergedPath);
+                console.log(`[SB Render] Merged video metadata: duration=${mergedMetadata.duration}s, hasAudio=${mergedMetadata.hasAudio}`);
+              } catch (error) {
+                console.warn('[SB Render] Failed to get merged video metadata, estimating duration');
+                // Estimate duration based on input videos/images
+                let estimatedDuration = 0;
+                for (const item of mediaItems) {
+                  if (item.type === 'image') {
+                    estimatedDuration += item.duration || 3;
+                  } else {
+                    estimatedDuration += 10; // Estimate 10s per video
+                  }
+                }
+                mergedMetadata = {
+                  duration: estimatedDuration,
+                  width: 1920,
+                  height: 1080,
+                  hasAudio: true,
+                  videoCodec: 'unknown'
+                };
+              }
+              
+              // Add BGM to merged video
+              const audioConfig: IAudioMixConfig = {
+                videoDuration: mergedMetadata.duration,
+                bgmPath: mergeBgmPath,
+                bgmVolume: this.getNodeParameter('bgmVolume', itemIndex, 30) as number,
+                bgmFadeIn: this.getNodeParameter('bgmFadeIn', itemIndex, 2) as number,
+                bgmFadeOut: this.getNodeParameter('bgmFadeOut', itemIndex, 2) as number,
+                narrationVolume: 100, // Default value
+                narrationDelay: 0, // Default value
+              };
+              
+              const audioFilterChain = audioMixer.getAudioFilterChain(audioConfig, mergedMetadata.hasAudio);
+              console.log(`[SB Render] Adding BGM to merged video with filter: ${audioFilterChain}`);
+              
+              const outputPath = await fileManager.createTempFile(`.${mergeOutputFormat}`);
+              videoBuffer = await videoComposer.composeWithAudioMix(
+                tempMergedPath,
+                mergeBgmPath,
+                null, // No narration
+                null, // No subtitles
+                audioFilterChain,
+                outputPath,
+                {
+                  videoCodec: mergeVideoCodec,
+                  quality: mergeQuality,
+                  customCRF: mergeCustomCRF,
+                  outputFormat: mergeOutputFormat,
+                } as ISbRenderNodeParams,
+              );
+            } else {
+              // Just merge videos without BGM
+              const outputPath = await fileManager.createTempFile(`.${mergeOutputFormat}`);
+              videoBuffer = await videoComposer.mergeVideos(
+                videoPaths,
+                outputPath,
+                mergeVideoCodec,
+                mergeQuality,
+                mergeCustomCRF,
+                mergeOutputFormat,
+              );
+            }
+            
             console.log(`[SB Render] Merge completed, buffer size: ${videoBuffer.length} bytes`);
 
             // Return result with binary data

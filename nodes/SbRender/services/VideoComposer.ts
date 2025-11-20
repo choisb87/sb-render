@@ -67,7 +67,9 @@ try {
   // STRATEGY 2: Try npm-installed binaries if system binaries not available
   if (!ffmpegPath || !ffprobePath) {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
 
       if (!ffmpegPath && ffmpegInstaller.path) {

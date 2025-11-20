@@ -202,6 +202,7 @@ export interface IVideoMetadata {
   hasAudio: boolean;
   videoCodec: string;
   audioCodec?: string;
+  fps?: number; // Frames per second
 }
 
 // ============================================================================

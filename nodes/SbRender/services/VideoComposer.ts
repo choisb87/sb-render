@@ -243,9 +243,6 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
-    // Track if we need audio tempo adjustment for half frame rate
-    let needsAudioTempo = false;
-
     // Get video duration with better error handling for n8n
     let videoMetadata: IVideoMetadata;
     try {
@@ -376,39 +373,19 @@ export class VideoComposer implements IVideoComposer {
             // Simple audio mapping based on what inputs we have
             if (bgmPath && narrationPath) {
               // Use simple audio filters instead of complex filter
-              const audioFilters: Array<{filter: string; options: string | number}> = [
+              command.audioFilters([
                 {
                   filter: 'volume',
                   options: (config.bgmVolume || 30) / 100
                 }
-              ];
-
-              // Add tempo adjustment for half frame rate
-              if (needsAudioTempo) {
-                audioFilters.push({
-                  filter: 'atempo',
-                  options: '0.5'
-                });
-              }
-
-              command.audioFilters(audioFilters);
+              ]);
             } else if (bgmPath) {
-              const audioFilters: Array<{filter: string; options: string | number}> = [
+              command.audioFilters([
                 {
                   filter: 'volume',
                   options: (config.bgmVolume || 30) / 100
                 }
-              ];
-
-              // Add tempo adjustment for half frame rate
-              if (needsAudioTempo) {
-                audioFilters.push({
-                  filter: 'atempo',
-                  options: '0.5'
-                });
-              }
-
-              command.audioFilters(audioFilters);
+              ]);
             }
           }
         } else {
@@ -418,44 +395,17 @@ export class VideoComposer implements IVideoComposer {
           // Apply simple volume control if BGM is present
           if (bgmPath) {
             console.log(`[ComposeAudioMix] Applying simple BGM volume: ${config.bgmVolume || 30}%`);
-            const audioFilters: Array<{filter: string; options: string | number}> = [
+            command.audioFilters([
               {
                 filter: 'volume',
                 options: (config.bgmVolume || 30) / 100
               }
-            ];
-
-            // Add tempo adjustment for half frame rate
-            if (needsAudioTempo) {
-              audioFilters.push({
-                filter: 'atempo',
-                options: '0.5'
-              });
-            }
-
-            command.audioFilters(audioFilters);
+            ]);
           }
         }
 
         // Video filters
         const videoFilters: string[] = [];
-
-        // Half frame rate if enabled (doubles duration)
-        if (config.halfFrameRate) {
-          // Slow down video by doubling PTS (2x slower = 2x duration)
-          videoFilters.push('setpts=2.0*PTS');
-
-          // Also slow down audio to match video speed
-          // atempo=0.5 means half speed, which doubles duration
-          if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
-            // Audio is being mixed, we need to modify the complex filter
-            finalAudioFilterChain = finalAudioFilterChain.replace('[mixed]', ',atempo=0.5[mixed]');
-          } else {
-            // Simple audio - will add atempo in audioFilters below
-            // Mark that we need audio tempo adjustment
-            needsAudioTempo = true;
-          }
-        }
 
         // If narration is longer than video, freeze last frame
         if (narrationDuration > videoDuration) {
@@ -484,6 +434,22 @@ export class VideoComposer implements IVideoComposer {
           '-preset medium',
           '-movflags +faststart',
         ];
+
+        // Half frame rate: reduce output frame rate to double duration
+        // This keeps the same frames but displays them slower
+        if (config.halfFrameRate) {
+          if (videoMetadata.fps) {
+            const halfFps = videoMetadata.fps / 2;
+            outputOptions.push(`-r ${halfFps}`);
+            console.log(`[ComposeAudioMix] Half frame rate enabled: ${videoMetadata.fps}fps → ${halfFps}fps (2x duration)`);
+            debugLog(`[ComposeAudioMix] Half frame rate: ${videoMetadata.fps} → ${halfFps}fps`);
+          } else {
+            // Fallback to 12fps if we couldn't detect original frame rate
+            outputOptions.push('-r 12');
+            console.warn('[ComposeAudioMix] Half frame rate enabled but fps unknown, using 12fps fallback');
+            debugLog('[ComposeAudioMix] Half frame rate: fps unknown, using 12fps fallback');
+          }
+        }
 
         // Map video and mixed audio with safe fallback
         if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
@@ -633,8 +599,23 @@ export class VideoComposer implements IVideoComposer {
         const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
         const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
 
+        // Extract frame rate from video stream
+        let fps: number | undefined;
+        if (videoStream) {
+          // r_frame_rate is a fraction like "24/1" or "30000/1001"
+          const frameRateStr = videoStream.r_frame_rate || videoStream.avg_frame_rate;
+          if (frameRateStr) {
+            const [num, den] = frameRateStr.split('/').map(Number);
+            if (den && den > 0) {
+              fps = num / den;
+              console.log(`[Metadata] Detected frame rate: ${fps.toFixed(2)}fps (${frameRateStr})`);
+              debugLog(`[Metadata] Frame rate: ${fps}fps from ${frameRateStr}`);
+            }
+          }
+        }
+
         const streamInfo = {
-          videoStream: videoStream ? `${videoStream.codec_name} ${videoStream.width}x${videoStream.height}` : 'none',
+          videoStream: videoStream ? `${videoStream.codec_name} ${videoStream.width}x${videoStream.height} @${fps?.toFixed(2) || '?'}fps` : 'none',
           audioStream: audioStream ? `${audioStream.codec_name} channels=${audioStream.channels}` : 'none'
         };
         console.log(`[Metadata] Streams found:`, streamInfo);
@@ -659,6 +640,7 @@ export class VideoComposer implements IVideoComposer {
             hasAudio: hasValidAudio,
             videoCodec: 'unknown',
             audioCodec: audioStream?.codec_name,
+            fps: undefined,
           });
           return;
         }
@@ -670,6 +652,7 @@ export class VideoComposer implements IVideoComposer {
           hasAudio: hasValidAudio,
           videoCodec: videoStream.codec_name || 'unknown',
           audioCodec: audioStream?.codec_name,
+          fps: fps,
         };
 
         console.log(`[Metadata] ✅ Result:`, result);

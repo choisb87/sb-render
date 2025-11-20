@@ -58,11 +58,13 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "@ffprobe-installer/ffprobe": "^2.1.2",
     "fluent-ffmpeg": "^2.1.2",
     "node-fetch": "^2.6.12",
     "tmp-promise": "^3.0.3"
+  },
+  "optionalDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2"
   },
   "peerDependencies": {
     "n8n-workflow": "*"

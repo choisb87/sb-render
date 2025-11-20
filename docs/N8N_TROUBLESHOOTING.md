@@ -1,6 +1,42 @@
 # n8n 환경에서의 SB Render 문제 해결
 
-## 🚨 일반적인 문제들
+## ✨ v1.1.20+ 자동 해결 기능
+
+**v1.1.20부터 대부분의 권한 문제가 자동으로 해결됩니다!**
+
+sb-render는 이제 다음 순서로 ffmpeg/ffprobe를 자동으로 찾습니다:
+1. 🥇 **시스템 ffmpeg/ffprobe** (Docker에서 권장)
+2. 🥈 npm 패키지 (권한 자동 수정 시도)
+3. 🥉 안전한 기본값 (제한적 기능)
+
+### 권장 설정 (가장 간단함)
+
+**Docker/n8n 환경에서는 시스템 ffmpeg 설치를 권장합니다:**
+
+```bash
+# Docker 컨테이너에서 실행
+docker exec <n8n-container> apk add ffmpeg
+# 또는 Debian 기반
+docker exec <n8n-container> apt-get update && apt-get install -y ffmpeg
+```
+
+**docker-compose.yml 예시:**
+```yaml
+services:
+  n8n:
+    image: n8nio/n8n
+    command: >
+      sh -c "
+        apk add --no-cache ffmpeg &&
+        n8n start
+      "
+```
+
+이제 **권한 문제나 추가 설정 없이 바로 작동합니다!** ✅
+
+---
+
+## 🚨 레거시 문제 해결 (v1.1.19 이하)
 
 ### 1. FFprobe 권한 오류
 
@@ -11,26 +47,23 @@ EACCES: permission denied, open '/app/node_modules/@ffprobe-installer/linux-x64/
 
 **해결 방법**:
 
-**방법 1: 설치 후 권한 수정**
+**방법 1: v1.1.20+ 으로 업데이트 (권장)**
 ```bash
-# n8n 컨테이너에서 실행
+npm update n8n-nodes-sb-render
+```
+
+**방법 2: 시스템 FFmpeg 설치 (권장)**
+```bash
+# Alpine
+apk add ffmpeg
+
+# Debian/Ubuntu
+apt-get install -y ffmpeg
+```
+
+**방법 3: 수동 권한 수정 (임시 해결)**
+```bash
 chmod +x node_modules/@ffprobe-installer/*/ffprobe*
-```
-
-**방법 2: Docker 이미지에 미리 추가**
-```dockerfile
-# Dockerfile에 추가
-RUN apt-get update && apt-get install -y ffmpeg
-RUN npm install n8n-nodes-sb-render
-RUN find node_modules/@ffprobe-installer -name "ffprobe*" -exec chmod +x {} \;
-```
-
-**방법 3: 시스템 FFmpeg 사용**
-```dockerfile
-# 시스템 패키지로 설치
-RUN apt-get install -y ffmpeg
-ENV FFMPEG_PATH=/usr/bin/ffmpeg
-ENV FFPROBE_PATH=/usr/bin/ffprobe
 ```
 
 ### 2. n8n Cloud 제한

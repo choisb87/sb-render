@@ -51,7 +51,38 @@ npm install n8n-nodes-sb-render
 
 - **n8n version**: 1.0.0 or higher
 - **Node.js**: 16.0.0 or higher
-- **FFmpeg**: Automatically installed via `@ffmpeg-installer/ffmpeg`
+- **FFmpeg**: Auto-detected from system or installed via npm packages
+
+### FFmpeg Installation (Docker/n8n Users)
+
+For **Docker or self-hosted n8n**, installing system ffmpeg is recommended:
+
+```bash
+# Alpine-based containers (n8n official image)
+docker exec <container-name> apk add --no-cache ffmpeg
+
+# Debian/Ubuntu-based containers
+docker exec <container-name> apt-get update && apt-get install -y ffmpeg
+```
+
+**docker-compose.yml example:**
+```yaml
+services:
+  n8n:
+    image: n8nio/n8n
+    command: >
+      sh -c "
+        apk add --no-cache ffmpeg &&
+        n8n start
+      "
+```
+
+The node will automatically:
+1. ✅ Use system ffmpeg/ffprobe if available (most reliable)
+2. ✅ Fall back to npm packages with auto-permission fix
+3. ✅ Gracefully degrade with limited functionality
+
+> **Note**: v1.1.20+ automatically handles ffmpeg/ffprobe detection and permission issues!
 
 ## Operations
 

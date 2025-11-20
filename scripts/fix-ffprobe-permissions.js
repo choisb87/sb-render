@@ -1,19 +1,89 @@
 #!/usr/bin/env node
 
 /**
- * Automatically set execute permissions on ffprobe binary after npm install
- * This is required for @ffprobe-installer package to work correctly
+ * Post-install script for n8n-nodes-sb-render
+ *
+ * This script:
+ * 1. Tries to install system ffmpeg/ffprobe (Docker/Linux only)
+ * 2. Sets execute permissions on npm-installed binaries
+ * 3. Provides helpful guidance for manual setup
  */
 
 const { chmodSync, existsSync, statSync } = require('fs');
+const { execSync } = require('child_process');
 const { resolve, join } = require('path');
 const os = require('os');
 
 // Detect current platform
 const platform = os.platform();
 const arch = os.arch();
+const isDocker = existsSync('/.dockerenv') || existsSync('/run/.containerenv');
 
 console.log(`🔍 Platform detected: ${platform}-${arch}`);
+if (isDocker) {
+  console.log('🐳 Docker/Container environment detected');
+}
+
+/**
+ * Try to install system ffmpeg (Docker/Linux only)
+ * Returns true if successful or already installed
+ */
+function tryInstallSystemFFmpeg() {
+  if (platform !== 'linux' || process.getuid?.() !== 0) {
+    return false; // Only try on Linux as root
+  }
+
+  try {
+    // Check if already installed
+    execSync('which ffmpeg', { stdio: 'ignore' });
+    console.log('✅ System ffmpeg already installed');
+    return true;
+  } catch {
+    // Not installed, try to install
+    console.log('📦 Attempting to install system ffmpeg...');
+
+    try {
+      // Detect package manager and install
+      if (existsSync('/usr/bin/apk')) {
+        // Alpine (n8n official Docker image)
+        execSync('apk add --no-cache ffmpeg', { stdio: 'inherit' });
+        console.log('✅ Installed ffmpeg via apk (Alpine)');
+        return true;
+      } else if (existsSync('/usr/bin/apt-get')) {
+        // Debian/Ubuntu
+        execSync('apt-get update && apt-get install -y ffmpeg', { stdio: 'inherit' });
+        console.log('✅ Installed ffmpeg via apt-get (Debian/Ubuntu)');
+        return true;
+      } else if (existsSync('/usr/bin/yum')) {
+        // RedHat/CentOS
+        execSync('yum install -y ffmpeg', { stdio: 'inherit' });
+        console.log('✅ Installed ffmpeg via yum (RedHat/CentOS)');
+        return true;
+      }
+    } catch (installError) {
+      console.warn('⚠️  Could not auto-install ffmpeg:', installError.message);
+      return false;
+    }
+  }
+
+  return false;
+}
+
+// Try to install system ffmpeg in Docker environments
+if (isDocker && platform === 'linux') {
+  console.log('\n🚀 Auto-install attempt (Docker environment)...');
+  const installed = tryInstallSystemFFmpeg();
+
+  if (installed) {
+    console.log('✨ System ffmpeg is ready! No additional setup needed.');
+    console.log('   sb-render will automatically use system binaries.\n');
+  } else {
+    console.log('ℹ️  Auto-install not available (requires root or manual setup)');
+    console.log('   Falling back to npm packages with permission fix...\n');
+  }
+}
+
+console.log(`🔧 Setting up npm ffmpeg/ffprobe binaries...`);
 
 // Platform-specific binary paths
 const getPlatformPath = () => {
@@ -89,26 +159,51 @@ for (const ffprobePath of possiblePaths) {
 }
 
 // Summary and recommendations
-console.log('\n📋 Summary:');
-if (successCount === 0 && errorCount === 0) {
-  console.warn('⚠️  No ffprobe binaries found. This is normal if @ffprobe-installer is not yet installed.');
-  console.warn('\n💡 If you encounter "EACCES" or "ENOENT" errors when running SB Render:');
-  console.warn('   1. Ensure @ffprobe-installer is installed: npm ls @ffprobe-installer');
-  console.warn('   2. For Linux/Docker: chmod +x node_modules/@ffprobe-installer/*/ffprobe');
-  console.warn('   3. For n8n Cloud: Consider using system ffprobe instead');
-} else if (successCount > 0) {
-  console.log(`✅ Successfully processed ${successCount} ffprobe binary(ies)`);
-  
-  if (process.env.NODE_ENV === 'production' || process.env.N8N_CONFIG_FILES) {
-    console.log('\n🐳 Docker/n8n environment detected. Additional tips:');
-    console.log('   - Ensure container has execute permissions on /tmp and node_modules');
-    console.log('   - Consider adding ffmpeg/ffprobe to your Docker image');
-    console.log('   - For n8n Cloud: System-level ffprobe may be required');
-  }
-} else {
-  console.error('❌ Failed to set permissions on any ffprobe binaries');
-  console.error('\n🔧 Manual fix options:');
-  console.error('   1. chmod +x node_modules/@ffprobe-installer/*/ffprobe');
-  console.error('   2. Install system ffmpeg: apt-get install ffmpeg (Linux)');
-  console.error('   3. Use Docker with proper --privileged or volume mounts');
+console.log('\n📋 Post-install Summary:');
+
+// Check if system ffmpeg is available
+let hasSystemFFmpeg = false;
+try {
+  execSync('which ffmpeg', { stdio: 'ignore' });
+  hasSystemFFmpeg = true;
+} catch {
+  hasSystemFFmpeg = false;
 }
+
+if (hasSystemFFmpeg) {
+  console.log('🎉 Setup Complete - Ready to use!');
+  console.log('   ✅ System ffmpeg/ffprobe detected');
+  console.log('   ✅ sb-render will use system binaries (best option)');
+  console.log('   ✅ No additional configuration needed\n');
+} else if (successCount > 0) {
+  console.log('✅ Setup Complete - npm binaries ready');
+  console.log(`   ✅ Fixed permissions on ${successCount} binary(ies)`);
+  console.log('   ⚠️  Using npm binaries (fallback option)');
+  console.log('\n💡 For better performance in Docker/n8n:');
+  console.log('   Install system ffmpeg: docker exec <container> apk add ffmpeg');
+  console.log('   OR: docker exec <container> apt-get install -y ffmpeg\n');
+} else if (successCount === 0 && errorCount === 0) {
+  console.warn('⚠️  No ffmpeg binaries found');
+  console.warn('   This is normal if optional dependencies failed to install.');
+  console.warn('\n📦 Recommended setup for your environment:');
+
+  if (isDocker || platform === 'linux') {
+    console.warn('   1. Install system ffmpeg (recommended):');
+    console.warn('      • Alpine: apk add ffmpeg');
+    console.warn('      • Debian/Ubuntu: apt-get install -y ffmpeg');
+    console.warn('      • RedHat/CentOS: yum install -y ffmpeg');
+  } else {
+    console.warn('   1. Install system ffmpeg:');
+    console.warn('      • macOS: brew install ffmpeg');
+    console.warn('      • Windows: choco install ffmpeg');
+  }
+  console.warn('   2. OR reinstall with: npm install --include=optional\n');
+} else {
+  console.error('❌ Permission fix failed');
+  console.error('\n🔧 Manual setup required:');
+  console.error('   Option 1 (Recommended): Install system ffmpeg');
+  console.error('   Option 2: chmod +x node_modules/@ffprobe-installer/*/ffprobe');
+  console.error('   Option 3: Use Docker with proper permissions\n');
+}
+
+console.log('📚 Documentation: https://github.com/choisb87/sb-render#prerequisites');

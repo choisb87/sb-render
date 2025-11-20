@@ -243,6 +243,9 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
+    // Track if we need audio tempo adjustment for half frame rate
+    let needsAudioTempo = false;
+
     // Get video duration with better error handling for n8n
     let videoMetadata: IVideoMetadata;
     try {
@@ -369,23 +372,43 @@ export class VideoComposer implements IVideoComposer {
             
             // Fallback to simple audio mapping
             finalAudioFilterChain = '';
-            
+
             // Simple audio mapping based on what inputs we have
             if (bgmPath && narrationPath) {
               // Use simple audio filters instead of complex filter
-              command.audioFilters([
+              const audioFilters: Array<{filter: string; options: string | number}> = [
                 {
                   filter: 'volume',
                   options: (config.bgmVolume || 30) / 100
                 }
-              ]);
+              ];
+
+              // Add tempo adjustment for half frame rate
+              if (needsAudioTempo) {
+                audioFilters.push({
+                  filter: 'atempo',
+                  options: '0.5'
+                });
+              }
+
+              command.audioFilters(audioFilters);
             } else if (bgmPath) {
-              command.audioFilters([
+              const audioFilters: Array<{filter: string; options: string | number}> = [
                 {
                   filter: 'volume',
                   options: (config.bgmVolume || 30) / 100
                 }
-              ]);
+              ];
+
+              // Add tempo adjustment for half frame rate
+              if (needsAudioTempo) {
+                audioFilters.push({
+                  filter: 'atempo',
+                  options: '0.5'
+                });
+              }
+
+              command.audioFilters(audioFilters);
             }
           }
         } else {
@@ -395,12 +418,22 @@ export class VideoComposer implements IVideoComposer {
           // Apply simple volume control if BGM is present
           if (bgmPath) {
             console.log(`[ComposeAudioMix] Applying simple BGM volume: ${config.bgmVolume || 30}%`);
-            command.audioFilters([
+            const audioFilters: Array<{filter: string; options: string | number}> = [
               {
                 filter: 'volume',
                 options: (config.bgmVolume || 30) / 100
               }
-            ]);
+            ];
+
+            // Add tempo adjustment for half frame rate
+            if (needsAudioTempo) {
+              audioFilters.push({
+                filter: 'atempo',
+                options: '0.5'
+              });
+            }
+
+            command.audioFilters(audioFilters);
           }
         }
 
@@ -409,8 +442,19 @@ export class VideoComposer implements IVideoComposer {
 
         // Half frame rate if enabled (doubles duration)
         if (config.halfFrameRate) {
-          // Slow down video by doubling PTS and maintaining consistent frame timing
+          // Slow down video by doubling PTS (2x slower = 2x duration)
           videoFilters.push('setpts=2.0*PTS');
+
+          // Also slow down audio to match video speed
+          // atempo=0.5 means half speed, which doubles duration
+          if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
+            // Audio is being mixed, we need to modify the complex filter
+            finalAudioFilterChain = finalAudioFilterChain.replace('[mixed]', ',atempo=0.5[mixed]');
+          } else {
+            // Simple audio - will add atempo in audioFilters below
+            // Mark that we need audio tempo adjustment
+            needsAudioTempo = true;
+          }
         }
 
         // If narration is longer than video, freeze last frame
@@ -440,11 +484,6 @@ export class VideoComposer implements IVideoComposer {
           '-preset medium',
           '-movflags +faststart',
         ];
-
-        // Add explicit frame rate for half frame rate mode to ensure proper playback
-        if (config.halfFrameRate) {
-          outputOptions.push('-r 24');
-        }
 
         // Map video and mixed audio with safe fallback
         if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {

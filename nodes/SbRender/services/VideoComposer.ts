@@ -407,10 +407,28 @@ export class VideoComposer implements IVideoComposer {
         // Video filters
         const videoFilters: string[] = [];
 
-        // If narration is longer than video, freeze last frame
-        if (narrationDuration > videoDuration) {
-          const freezeDuration = narrationDuration - videoDuration;
+        // Calculate target video duration based on options
+        let targetVideoDuration = videoDuration;
+
+        if (config.halfFrameRate) {
+          // Half frame rate doubles the video duration
+          targetVideoDuration = videoDuration * 2;
+          console.log(`[ComposeAudioMix] Half frame rate: ${videoDuration}s → ${targetVideoDuration}s`);
+        } else if (config.syncToAudio && narrationDuration > 0) {
+          // Sync to audio: stretch/compress video to match narration duration using setpts
+          const speedFactor = videoDuration / narrationDuration;
+          videoFilters.push(`setpts=${speedFactor.toFixed(4)}*PTS`);
+          targetVideoDuration = narrationDuration;
+          console.log(`[ComposeAudioMix] Sync to audio: ${videoDuration}s → ${targetVideoDuration}s (speed: ${speedFactor.toFixed(4)}x)`);
+          debugLog(`[ComposeAudioMix] Video speed adjustment: setpts=${speedFactor}*PTS`);
+        }
+
+        // If narration is longer than target video duration, freeze last frame
+        // This handles cases where narration is longer even after half frame rate
+        if (narrationDuration > targetVideoDuration) {
+          const freezeDuration = narrationDuration - targetVideoDuration;
           videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration}`);
+          console.log(`[ComposeAudioMix] Extending video with freeze frame: +${freezeDuration}s`);
         }
 
         // Add subtitle overlay if present

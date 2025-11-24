@@ -773,7 +773,22 @@ export class SbRender implements INodeType {
           },
         },
         default: false,
-        description: 'Whether to reduce frame rate by half to double the video duration (slow motion effect)',
+        description: 'Whether to reduce frame rate by half to double the video duration (displays same frames slower)',
+      },
+
+      {
+        displayName: 'Sync Video to Audio Duration',
+        name: 'syncToAudio',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableNarration: [true],
+          },
+        },
+        default: false,
+        description: 'Whether to stretch/compress video to match narration audio duration (ignores Half Frame Rate)',
       },
 
       {
@@ -1282,6 +1297,7 @@ export class SbRender implements INodeType {
               quality: this.getNodeParameter('quality', itemIndex, DEFAULT_VALUES.quality) as 'low' | 'medium' | 'high' | 'custom',
               customCRF: this.getNodeParameter('customCRF', itemIndex, 18) as number,
               halfFrameRate: this.getNodeParameter('halfFrameRate', itemIndex, false) as boolean,
+              syncToAudio: this.getNodeParameter('syncToAudio', itemIndex, false) as boolean,
               outputBinaryProperty: this.getNodeParameter('outputBinaryProperty', itemIndex, DEFAULT_VALUES.outputBinaryProperty) as string,
             };
 

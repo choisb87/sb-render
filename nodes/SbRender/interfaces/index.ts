@@ -54,6 +54,7 @@ export interface ISbRenderNodeParams {
   quality?: 'low' | 'medium' | 'high' | 'custom';
   customCRF?: number;
   halfFrameRate?: boolean;
+  syncToAudio?: boolean; // Sync video duration to audio duration (stretch/compress video)
   outputBinaryProperty?: string;
 
   // Output Configuration (for Merge operation)

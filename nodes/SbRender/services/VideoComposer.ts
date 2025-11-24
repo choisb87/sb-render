@@ -420,9 +420,11 @@ export class VideoComposer implements IVideoComposer {
         let targetVideoDuration = videoDuration;
 
         if (config.halfFrameRate) {
-          // Half frame rate doubles the video duration
+          // Half frame rate doubles the video duration by stretching PTS
+          videoFilters.push('setpts=2.0*PTS');
           targetVideoDuration = videoDuration * 2;
-          console.log(`[ComposeAudioMix] Half frame rate: ${videoDuration}s → ${targetVideoDuration}s`);
+          console.log(`[ComposeAudioMix] Half frame rate: ${videoDuration}s → ${targetVideoDuration}s (setpts=2.0*PTS)`);
+          debugLog(`[ComposeAudioMix] Video PTS doubled for half frame rate`);
         } else if (config.syncToAudio && narrationDuration > 0) {
           // Sync to audio: stretch/compress video to match narration duration using setpts
           const speedFactor = videoDuration / narrationDuration;
@@ -462,21 +464,8 @@ export class VideoComposer implements IVideoComposer {
           '-movflags +faststart',
         ];
 
-        // Half frame rate: reduce output frame rate to double duration
-        // This keeps the same frames but displays them slower
-        if (config.halfFrameRate) {
-          if (videoMetadata.fps) {
-            const halfFps = videoMetadata.fps / 2;
-            outputOptions.push(`-r ${halfFps}`);
-            console.log(`[ComposeAudioMix] Half frame rate enabled: ${videoMetadata.fps}fps → ${halfFps}fps (2x duration)`);
-            debugLog(`[ComposeAudioMix] Half frame rate: ${videoMetadata.fps} → ${halfFps}fps`);
-          } else {
-            // Fallback to 12fps if we couldn't detect original frame rate
-            outputOptions.push('-r 12');
-            console.warn('[ComposeAudioMix] Half frame rate enabled but fps unknown, using 12fps fallback');
-            debugLog('[ComposeAudioMix] Half frame rate: fps unknown, using 12fps fallback');
-          }
-        }
+        // Note: Half frame rate is handled by setpts=2.0*PTS in video filters
+        // No need to change output frame rate here
 
         // Map video and mixed audio with safe fallback
         if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {

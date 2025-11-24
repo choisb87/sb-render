@@ -467,6 +467,11 @@ export class VideoComposer implements IVideoComposer {
             console.warn('[ComposeAudioMix] Half frame rate enabled but fps unknown, using 12fps fallback');
             debugLog('[ComposeAudioMix] Half frame rate: fps unknown, using 12fps fallback');
           }
+
+          // Force output duration to match the doubled video duration
+          // This prevents FFmpeg from truncating video to match shorter audio
+          outputOptions.push(`-t ${targetVideoDuration}`);
+          console.log(`[ComposeAudioMix] Forcing output duration to ${targetVideoDuration}s`);
         }
 
         // Map video and mixed audio with safe fallback

@@ -427,11 +427,12 @@ export class VideoComposer implements IVideoComposer {
           debugLog(`[ComposeAudioMix] Video PTS doubled for half frame rate`);
         } else if (config.syncToAudio && narrationDuration > 0) {
           // Sync to audio: stretch/compress video to match narration duration using setpts
-          const speedFactor = videoDuration / narrationDuration;
-          videoFilters.push(`setpts=${speedFactor.toFixed(4)}*PTS`);
+          // setpts multiplier: >1 = slower/longer, <1 = faster/shorter
+          const ptsFactor = narrationDuration / videoDuration;
+          videoFilters.push(`setpts=${ptsFactor.toFixed(4)}*PTS`);
           targetVideoDuration = narrationDuration;
-          console.log(`[ComposeAudioMix] Sync to audio: ${videoDuration}s → ${targetVideoDuration}s (speed: ${speedFactor.toFixed(4)}x)`);
-          debugLog(`[ComposeAudioMix] Video speed adjustment: setpts=${speedFactor}*PTS`);
+          console.log(`[ComposeAudioMix] Sync to audio: ${videoDuration}s → ${targetVideoDuration}s (setpts=${ptsFactor.toFixed(4)}*PTS)`);
+          debugLog(`[ComposeAudioMix] Video PTS adjustment: ${ptsFactor.toFixed(4)}x for audio sync`);
         }
 
         // If narration is longer than target video duration, freeze last frame

@@ -348,6 +348,15 @@ export class VideoComposer implements IVideoComposer {
           finalAudioFilterChain = audioMixer.getAudioFilterChain(audioConfig, videoMetadata.hasAudio);
           console.log(`[ComposeAudioMix] Generated filter chain: "${finalAudioFilterChain}"`);
           debugLog(`[ComposeAudioMix] Generated filter chain: ${finalAudioFilterChain}`);
+
+          // If Half Frame Rate is enabled, pad audio to match doubled video duration
+          if (config.halfFrameRate && finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
+            const paddedVideoDuration = videoDuration * 2;
+            // Add apad filter to extend audio with silence to match video duration
+            finalAudioFilterChain = finalAudioFilterChain.replace('[mixed]', `,apad=whole_dur=${paddedVideoDuration}[mixed]`);
+            console.log(`[ComposeAudioMix] Padding audio to ${paddedVideoDuration}s for Half Frame Rate`);
+            debugLog(`[ComposeAudioMix] Audio padding filter added: whole_dur=${paddedVideoDuration}`);
+          }
         }
 
         // Apply complex audio filter with fallback to simple approach
@@ -467,11 +476,6 @@ export class VideoComposer implements IVideoComposer {
             console.warn('[ComposeAudioMix] Half frame rate enabled but fps unknown, using 12fps fallback');
             debugLog('[ComposeAudioMix] Half frame rate: fps unknown, using 12fps fallback');
           }
-
-          // Force output duration to match the doubled video duration
-          // This prevents FFmpeg from truncating video to match shorter audio
-          outputOptions.push(`-t ${targetVideoDuration}`);
-          console.log(`[ComposeAudioMix] Forcing output duration to ${targetVideoDuration}s`);
         }
 
         // Map video and mixed audio with safe fallback

@@ -42,9 +42,17 @@ npm version patch --no-git-tag-version
 NEW_VERSION=$(node -p "require('./package.json').version")
 echo "📌 New version: ${NEW_VERSION}"
 
-# Commit version bump
-git add package.json package-lock.json
-git commit -m "Bump version to ${NEW_VERSION}" || true
+# Commit version bump (add files that exist and are not ignored)
+if [ -f package-lock.json ]; then
+  git add package.json package-lock.json
+else
+  git add package.json
+fi
+git commit -m "chore: bump version to ${NEW_VERSION}
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>" || echo "⚠️  No changes to commit for version bump"
 
 npm publish --access public
 echo "✅ Published to npm: n8n-nodes-sb-render@${NEW_VERSION}"

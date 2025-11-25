@@ -462,6 +462,61 @@ export class SbRender implements INodeType {
       },
 
       {
+        displayName: 'Large Text Mode',
+        name: 'srtLargeText',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+            subtitleSource: ['srt_string'],
+          },
+        },
+        default: false,
+        description: 'Whether to use large text mode (120px font, 20% background opacity, black background).',
+      },
+
+      {
+        displayName: 'Background Color',
+        name: 'srtBackgroundColor',
+        type: 'string',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+            subtitleSource: ['srt_string'],
+            srtLargeText: [false],
+          },
+        },
+        default: '#000000',
+        placeholder: '#000000',
+        description: 'Background color in hex format (e.g., #000000 for black). Only used when Large Text Mode is disabled.',
+      },
+
+      {
+        displayName: 'Background Opacity',
+        name: 'srtBackgroundOpacity',
+        type: 'number',
+        displayOptions: {
+          show: {
+            resource: ['Video'],
+            operation: ['Render'],
+            enableSubtitles: [true],
+            subtitleSource: ['srt_string'],
+            srtLargeText: [false],
+          },
+        },
+        default: 70,
+        typeOptions: {
+          minValue: 0,
+          maxValue: 100,
+        },
+        description: 'Background opacity (0-100). 0 = fully transparent, 100 = fully opaque. Only used when Large Text Mode is disabled.',
+      },
+
+      {
         displayName: 'SRT File URL',
         name: 'srtFileUrl',
         type: 'string',
@@ -1416,8 +1471,28 @@ export class SbRender implements INodeType {
               } else if (subtitleSource === 'srt_string') {
                 // Parse SRT content from string input
                 const srtContent = this.getNodeParameter('srtContent', itemIndex) as string;
+                const srtLargeText = this.getNodeParameter('srtLargeText', itemIndex, false) as boolean;
+
+                let defaultConfig: Partial<ISubtitleConfig>;
+                if (srtLargeText) {
+                  // Large text mode: 120px font, 20% opacity, black background
+                  defaultConfig = {
+                    fontSize: 120,
+                    backgroundColor: '#000000',
+                    backgroundOpacity: 20,
+                  };
+                } else {
+                  // Custom mode: use user-specified values
+                  const backgroundColor = this.getNodeParameter('srtBackgroundColor', itemIndex, '#000000') as string;
+                  const backgroundOpacity = this.getNodeParameter('srtBackgroundOpacity', itemIndex, 70) as number;
+                  defaultConfig = {
+                    backgroundColor,
+                    backgroundOpacity,
+                  };
+                }
+
                 if (srtContent) {
-                  subtitleArray = subtitleEngine.parseSRT(srtContent);
+                  subtitleArray = subtitleEngine.parseSRT(srtContent, defaultConfig);
                 }
               } else if (subtitleSource === 'srt_url') {
                 // Download SRT file from URL

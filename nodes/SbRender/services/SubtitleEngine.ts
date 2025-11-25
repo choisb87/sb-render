@@ -116,7 +116,8 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
       const alignment = this.getASSAlignment(subtitle.alignment, subtitle.position);
       const outline = subtitle.borderWidth || 2;
 
-      const styleDefinition = `Style: ${styleName},${fontName},${subtitle.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,1,${outline},2,${alignment},10,10,10,1`;
+      // BorderStyle: 3 = Opaque box (background color applied as box behind text)
+      const styleDefinition = `Style: ${styleName},${fontName},${subtitle.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,3,${outline},2,${alignment},10,10,10,1`;
 
       uniqueStyles.set(styleName, styleDefinition);
     });

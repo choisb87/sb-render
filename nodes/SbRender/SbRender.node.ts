@@ -873,6 +873,20 @@ export class SbRender implements INodeType {
       },
 
       {
+        displayName: 'Audio URL',
+        name: 'mergeAudioUrl',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['Merge'],
+          },
+        },
+        default: '',
+        placeholder: 'https://example.com/audio.mp3',
+        description: 'Optional audio URL. If provided, will automatically calculate image durations to match audio length.',
+      },
+
+      {
         displayName: 'Output Filename',
         name: 'outputFilename',
         type: 'string',

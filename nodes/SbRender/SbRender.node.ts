@@ -474,13 +474,13 @@ export class SbRender implements INodeType {
           },
         },
         default: false,
-        description: 'Whether to use large text mode (120px font, 20% background opacity, black background).',
+        description: 'Whether to use large text mode (120px font, 20% background opacity, black background)',
       },
 
       {
         displayName: 'Background Color',
         name: 'srtBackgroundColor',
-        type: 'string',
+        type: 'color',
         displayOptions: {
           show: {
             resource: ['Video'],

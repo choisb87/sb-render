@@ -58,6 +58,7 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "canvas": "^3.2.0",
     "fluent-ffmpeg": "^2.1.2",
     "node-fetch": "^2.6.12",
     "tmp-promise": "^3.0.3"

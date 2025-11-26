@@ -771,7 +771,7 @@ export class VideoComposer implements IVideoComposer {
         if (allHaveAudio || hasMixedAudio) {
           // All videos have audio OR mixed audio - normalize video and ensure audio for all
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=24[v${index}]`
           ).join(';');
 
           // Prepare audio streams
@@ -803,7 +803,7 @@ export class VideoComposer implements IVideoComposer {
         } else {
           // No videos have audio - normalize and concat video only
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=24[v${index}]`
           ).join(';');
           const videoStreams = videoPaths.map((_, index) => `[v${index}]`).join('');
 
@@ -909,9 +909,9 @@ export class VideoComposer implements IVideoComposer {
         });
 
         // Build filter to scale all images to 1920x1080 and concat
-        // Each image is scaled to fit within 1920x1080 with padding (black bars) if needed
+        // Each image is scaled to fill 1920x1080 (16:9) and cropped to fit
         const scaleFilters = imagePaths.map((_, index) =>
-          `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+          `[${index}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=24[v${index}]`
         ).join(';');
 
         const concatInputs = imagePaths.map((_, index) => `[v${index}]`).join('');

@@ -47,33 +47,23 @@ export class AudioMixer implements IAudioMixer {
       const bgmVolume = config.bgmVolume / 100;
       const videoDuration = config.videoDuration;
       const bgmFadeIn = config.bgmFadeIn || 0;
-      const bgmFadeOut = config.bgmFadeOut || 0;
 
       console.log(`[AudioMixer] Processing BGM - Volume: ${bgmVolume}, Duration: ${videoDuration}s`);
 
       // BGM is looped at input level with stream_loop
       // Apply volume and basic processing
+      // DO NOT trim BGM - let it continue until the longest audio ends
       let bgmFilter = `[${inputIndex}:a]volume=${bgmVolume}`;
-      
+
       // Add fade effects if specified and values are valid
       if (bgmFadeIn > 0 && !isNaN(bgmFadeIn)) {
         bgmFilter += `,afade=t=in:ss=0:d=${bgmFadeIn}`;
         console.log(`[AudioMixer] Adding BGM fade in: ${bgmFadeIn}s`);
       }
-      if (bgmFadeOut > 0 && !isNaN(bgmFadeOut)) {
-        const fadeStart = Math.max(0, videoDuration - bgmFadeOut);
-        if (!isNaN(fadeStart)) {
-          bgmFilter += `,afade=t=out:st=${fadeStart}:d=${bgmFadeOut}`;
-          console.log(`[AudioMixer] Adding BGM fade out: ${bgmFadeOut}s at ${fadeStart}s`);
-        }
-      }
-      
-      // Simple trim to match video duration
-      if (videoDuration > 0 && !isNaN(videoDuration)) {
-        bgmFilter += `,atrim=0:${videoDuration}[bgm]`;
-      } else {
-        bgmFilter += `[bgm]`;
-      }
+      // Note: Fade out will be handled at the end based on actual mixed duration
+      // For now, we don't apply fade out to BGM to preserve narration length
+
+      bgmFilter += `[bgm]`;
 
       console.log(`[AudioMixer] BGM filter: ${bgmFilter}`);
       filters.push(bgmFilter);

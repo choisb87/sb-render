@@ -303,18 +303,23 @@ export class VideoComposer implements IVideoComposer {
       }
     }
 
+    // Calculate maximum duration needed for BGM (to cover both video and narration)
+    const maxDuration = Math.max(videoDuration, narrationDuration) + 10;
+    console.log(`[ComposeAudioMix] Max duration for BGM: ${maxDuration}s (video: ${videoDuration}s, narration: ${narrationDuration}s)`);
+
     return new Promise((resolve, reject) => {
       try {
         const command = ffmpeg(videoPath);
 
         // Add BGM input with simple approach
         if (bgmPath) {
-          console.log(`[ComposeAudioMix] Adding BGM input for ${videoDuration}s video`);
+          console.log(`[ComposeAudioMix] Adding BGM input for ${maxDuration}s (to cover narration)`);
           debugLog(`[ComposeAudioMix] BGM strategy: simple input mapping`);
           // Use simple input approach without complex looping
+          // Extended to cover both video AND narration duration
           command.input(bgmPath).inputOptions([
             '-stream_loop', '10',  // Fixed number of loops instead of calculation
-            '-t', (videoDuration + 10).toString() // Buffer time
+            '-t', maxDuration.toString() // Extended to cover narration
           ]);
         }
 

@@ -301,6 +301,18 @@ export class VideoComposer implements IVideoComposer {
       } catch (error) {
         console.warn('Failed to get narration duration:', error);
       }
+    } else if (videoMetadata.hasAudio) {
+      // If no separate narration file but video has audio, check video's audio duration
+      // This handles cases where narration was already merged into the video
+      try {
+        const videoAudioDuration = await this.getVideoAudioDuration(videoPath);
+        if (videoAudioDuration > videoDuration) {
+          narrationDuration = videoAudioDuration;
+          console.log(`[ComposeAudioMix] Video contains audio longer than video: ${videoAudioDuration}s`);
+        }
+      } catch (error) {
+        console.warn('Failed to get video audio duration:', error);
+      }
     }
 
     // Calculate maximum duration needed for BGM (to cover both video and narration)
@@ -576,6 +588,30 @@ export class VideoComposer implements IVideoComposer {
 
         const duration = metadata.format.duration || 0;
         resolve(duration);
+      });
+    });
+  }
+
+  /**
+   * Get video's audio track duration
+   * This is useful when video has audio that might be longer than video duration
+   */
+  async getVideoAudioDuration(videoPath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(videoPath, (error, metadata) => {
+        if (error) {
+          reject(new Error(`Failed to get video audio duration: ${error.message}`));
+          return;
+        }
+
+        // Find audio stream and get its duration
+        const audioStream = metadata.streams?.find((stream: any) => stream.codec_type === 'audio');
+        if (audioStream && audioStream.duration) {
+          resolve(parseFloat(audioStream.duration));
+        } else {
+          // Fallback to format duration
+          resolve(metadata.format.duration || 0);
+        }
       });
     });
   }

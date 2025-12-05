@@ -1381,12 +1381,14 @@ export class SbRender implements INodeType {
             }
 
             // 1. Download/extract video
+            console.log(`[SB Render] Input - videoSource: ${params.videoSource}, videoUrl: ${params.videoUrl?.slice(0, 100)}`);
             const videoPath = await getMediaFile(
               params.videoSource || 'url',
               params.videoUrl,
               params.videoBinaryProperty,
               itemIndex,
             );
+            console.log(`[SB Render] Downloaded video to: ${videoPath}`);
 
             // 2. Get video metadata (with fallback if ffprobe unavailable)
             let metadata: IVideoMetadata;

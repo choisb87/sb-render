@@ -206,7 +206,8 @@ export class VideoComposer implements IVideoComposer {
           // __dirname is dist/nodes/SbRender/services, go up 4 levels to package root
           const fontsDir = join(dirname(dirname(dirname(dirname(__dirname)))), 'fonts');
           const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/:/g, '\\:');
-          videoFilters.push(`ass=${escapedPath}:fontsdir=${escapedFontsDir}`);
+          // Use 'subtitles' filter instead of 'ass' - handles both SRT and ASS formats
+          videoFilters.push(`subtitles=${escapedPath}:fontsdir=${escapedFontsDir}`);
         }
 
         // Apply video filters if any
@@ -512,7 +513,8 @@ export class VideoComposer implements IVideoComposer {
           // __dirname is dist/nodes/SbRender/services, go up 4 levels to package root
           const fontsDir = join(dirname(dirname(dirname(dirname(__dirname)))), 'fonts');
           const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/:/g, '\\:');
-          videoFilters.push(`ass=${escapedPath}:fontsdir=${escapedFontsDir}`);
+          // Use 'subtitles' filter instead of 'ass' - handles both SRT and ASS formats
+          videoFilters.push(`subtitles=${escapedPath}:fontsdir=${escapedFontsDir}`);
         }
 
         if (videoFilters.length > 0) {

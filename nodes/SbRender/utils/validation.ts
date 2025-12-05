@@ -12,6 +12,18 @@ export class ValidationError extends Error {
 }
 
 /**
+ * Helper to ensure value is a string, with logging for debugging
+ */
+function ensureString(value: unknown, fieldName: string): string {
+  if (typeof value !== 'string') {
+    const preview = JSON.stringify(value)?.slice(0, 200) || 'undefined';
+    console.error(`[SB Render] ${fieldName} is not a string:`, typeof value, preview);
+    throw new ValidationError(`${fieldName} must be a string, received: ${typeof value}`);
+  }
+  return value;
+}
+
+/**
  * Validate video source configuration
  */
 export function validateVideoSource(params: ISbRenderNodeParams): void {
@@ -20,23 +32,21 @@ export function validateVideoSource(params: ISbRenderNodeParams): void {
   }
 
   if (params.videoSource === 'url') {
-    // Type check - videoUrl must be a string
-    if (typeof params.videoUrl !== 'string') {
-      console.error('[SB Render] videoUrl is not a string:', typeof params.videoUrl, JSON.stringify(params.videoUrl).slice(0, 200));
-      throw new ValidationError(`Video URL must be a string, received: ${typeof params.videoUrl}`);
-    }
+    const videoUrl = ensureString(params.videoUrl, 'Video URL');
 
-    if (!params.videoUrl || params.videoUrl.trim() === '') {
+    if (!videoUrl || videoUrl.trim() === '') {
       throw new ValidationError('Video URL is required when video source is URL');
     }
 
-    if (!isValidUrl(params.videoUrl)) {
+    if (!isValidUrl(videoUrl)) {
       throw new ValidationError('Invalid video URL format');
     }
   }
 
   if (params.videoSource === 'binary') {
-    if (!params.videoBinaryProperty || params.videoBinaryProperty.trim() === '') {
+    const videoBinaryProperty = ensureString(params.videoBinaryProperty, 'Video binary property');
+
+    if (!videoBinaryProperty || videoBinaryProperty.trim() === '') {
       throw new ValidationError('Video binary property name is required when video source is binary');
     }
   }
@@ -53,17 +63,21 @@ export function validateBGMConfig(params: ISbRenderNodeParams): void {
   }
 
   if (params.bgmSource === 'url') {
-    if (!params.bgmUrl || params.bgmUrl.trim() === '') {
+    const bgmUrl = ensureString(params.bgmUrl, 'BGM URL');
+
+    if (!bgmUrl || bgmUrl.trim() === '') {
       throw new ValidationError('BGM URL is required when BGM source is URL');
     }
 
-    if (!isValidUrl(params.bgmUrl)) {
+    if (!isValidUrl(bgmUrl)) {
       throw new ValidationError('Invalid BGM URL format');
     }
   }
 
   if (params.bgmSource === 'binary') {
-    if (!params.bgmBinaryProperty || params.bgmBinaryProperty.trim() === '') {
+    const bgmBinaryProperty = ensureString(params.bgmBinaryProperty, 'BGM binary property');
+
+    if (!bgmBinaryProperty || bgmBinaryProperty.trim() === '') {
       throw new ValidationError('BGM binary property name is required when BGM source is binary');
     }
   }
@@ -95,17 +109,21 @@ export function validateNarrationConfig(params: ISbRenderNodeParams): void {
   }
 
   if (params.narrationSource === 'url') {
-    if (!params.narrationUrl || params.narrationUrl.trim() === '') {
+    const narrationUrl = ensureString(params.narrationUrl, 'Narration URL');
+
+    if (!narrationUrl || narrationUrl.trim() === '') {
       throw new ValidationError('Narration URL is required when narration source is URL');
     }
 
-    if (!isValidUrl(params.narrationUrl)) {
+    if (!isValidUrl(narrationUrl)) {
       throw new ValidationError('Invalid narration URL format');
     }
   }
 
   if (params.narrationSource === 'binary') {
-    if (!params.narrationBinaryProperty || params.narrationBinaryProperty.trim() === '') {
+    const narrationBinaryProperty = ensureString(params.narrationBinaryProperty, 'Narration binary property');
+
+    if (!narrationBinaryProperty || narrationBinaryProperty.trim() === '') {
       throw new ValidationError('Narration binary property name is required when narration source is binary');
     }
   }
@@ -128,7 +146,7 @@ export function validateSubtitles(subtitles: ISubtitleConfig[]): void {
   if (!subtitles || subtitles.length === 0) return;
 
   subtitles.forEach((subtitle, index) => {
-    if (!subtitle.text || subtitle.text.trim() === '') {
+    if (!subtitle.text || (typeof subtitle.text === 'string' && subtitle.text.trim() === '')) {
       throw new ValidationError(`Subtitle ${index + 1}: Text cannot be empty`);
     }
 
@@ -203,7 +221,9 @@ export function validateOutputConfig(params: ISbRenderNodeParams): void {
     }
   }
 
-  if (!params.outputBinaryProperty || params.outputBinaryProperty.trim() === '') {
+  const outputBinaryProperty = ensureString(params.outputBinaryProperty, 'Output binary property');
+
+  if (!outputBinaryProperty || outputBinaryProperty.trim() === '') {
     throw new ValidationError('Output binary property name is required');
   }
 }

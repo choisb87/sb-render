@@ -8,12 +8,64 @@ import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../int
 const DEBUG_MODE = process.env.SB_RENDER_DEBUG === 'true';
 const DEBUG_LOG_PATH = '/tmp/sb-render-debug.log';
 
+// Configuration constants
+const CONFIG = {
+  // Video defaults
+  DEFAULT_WIDTH: 1920,
+  DEFAULT_HEIGHT: 1080,
+  DEFAULT_FPS: 24,
+  DEFAULT_DURATION: 30,
+
+  // Audio defaults
+  AUDIO_SAMPLE_RATE: 44100,
+  AUDIO_CHANNELS: 2,
+  AUDIO_BITRATE: '192k',
+  DEFAULT_BGM_VOLUME: 30,
+  DEFAULT_NARRATION_VOLUME: 100,
+
+  // Timeouts (in milliseconds)
+  FFMPEG_TIMEOUT_MS: 3600000, // 1 hour for long videos
+  FFPROBE_TIMEOUT_MS: 30000,  // 30 seconds for metadata
+
+  // Limits
+  MAX_BGM_LOOPS: 100,
+  MIN_SUBTITLE_DURATION: 0.1,
+  SUBTITLE_GAP: 0.05,
+} as const;
+
 // Helper function for debug logging
 function debugLog(message: string): void {
   if (DEBUG_MODE) {
     const timestamp = new Date().toISOString();
     appendFileSync(DEBUG_LOG_PATH, `${timestamp} ${message}\n`);
   }
+}
+
+/**
+ * Create a timeout wrapper for FFmpeg commands
+ */
+function createTimeoutPromise<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operationName: string,
+  cleanup?: () => void
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      if (cleanup) cleanup();
+      reject(new Error(`[${operationName}] Operation timed out after ${timeoutMs / 1000}s`));
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
 }
 
 /**
@@ -243,67 +295,55 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
-    // Get video duration with better error handling for n8n
-    let videoMetadata: IVideoMetadata;
-    try {
-      videoMetadata = await this.getVideoMetadata(videoPath);
-      console.log(`[ComposeAudioMix] Video metadata: duration=${videoMetadata.duration}s, hasAudio=${videoMetadata.hasAudio}`);
-      debugLog(`[ComposeAudioMix] Video metadata: ${JSON.stringify(videoMetadata)}`);
-    } catch (error) {
-      console.warn('[ComposeAudioMix] Failed to get video metadata, using fallback duration detection');
-      debugLog(`[ComposeAudioMix] Metadata detection failed: ${error}`);
-      
-      // Fallback: Use ffprobe directly on video to get duration
-      try {
-        const fallbackDuration = await this.getFallbackDuration(videoPath);
-        videoMetadata = {
-          duration: fallbackDuration,
-          width: 1920,
-          height: 1080,
-          hasAudio: true, // Assume audio exists in n8n to preserve it
-          videoCodec: 'unknown'
-        };
-        console.log(`[ComposeAudioMix] Using fallback duration: ${fallbackDuration}s`);
-      } catch (fallbackError) {
-        console.warn('[ComposeAudioMix] Fallback duration detection also failed, using 30s default');
-        videoMetadata = {
-          duration: 30, // Conservative default for multiple merged videos
-          width: 1920,
-          height: 1080,
-          hasAudio: true,
-          videoCodec: 'unknown'
-        };
-      }
-    }
+    // Parallel metadata detection with timeout protection
+    console.log('[ComposeAudioMix] Starting parallel metadata detection...');
+    const metadataStart = Date.now();
+
+    // Create promises for all metadata we need
+    const videoMetadataPromise = this.getVideoMetadata(videoPath)
+      .catch((error) => {
+        console.warn('[ComposeAudioMix] Video metadata failed, trying fallback:', error.message);
+        return this.getFallbackDuration(videoPath)
+          .then((duration) => ({
+            duration,
+            width: CONFIG.DEFAULT_WIDTH,
+            height: CONFIG.DEFAULT_HEIGHT,
+            hasAudio: true,
+            videoCodec: 'unknown'
+          }))
+          .catch(() => ({
+            duration: CONFIG.DEFAULT_DURATION,
+            width: CONFIG.DEFAULT_WIDTH,
+            height: CONFIG.DEFAULT_HEIGHT,
+            hasAudio: true,
+            videoCodec: 'unknown'
+          }));
+      });
+
+    const bgmDurationPromise = bgmPath
+      ? this.getAudioDuration(bgmPath).catch(() => 180)
+      : Promise.resolve(0);
+
+    const narrationDurationPromise = narrationPath
+      ? this.getAudioDuration(narrationPath).catch(() => 0)
+      : Promise.resolve(0);
+
+    // Run all metadata detection in parallel with timeout
+    const [videoMetadata, bgmDuration, narrationDurationFromFile] = await createTimeoutPromise(
+      Promise.all([videoMetadataPromise, bgmDurationPromise, narrationDurationPromise]),
+      CONFIG.FFPROBE_TIMEOUT_MS,
+      'MetadataDetection'
+    );
+
+    console.log(`[ComposeAudioMix] Metadata detection completed in ${Date.now() - metadataStart}ms`);
+    console.log(`[ComposeAudioMix] Video: ${videoMetadata.duration}s, BGM: ${bgmDuration}s, Narration: ${narrationDurationFromFile}s`);
+    debugLog(`[ComposeAudioMix] Video metadata: ${JSON.stringify(videoMetadata)}`);
 
     const videoDuration = videoMetadata.duration;
 
-    // Get BGM duration if exists
-    let bgmDuration = 0;
-    if (bgmPath) {
-      try {
-        bgmDuration = await this.getAudioDuration(bgmPath);
-        console.log(`[ComposeAudioMix] BGM duration: ${bgmDuration}s, video duration: ${videoDuration}s`);
-        debugLog(`[ComposeAudioMix] BGM duration: ${bgmDuration}s`);
-      } catch (error) {
-        console.warn('Failed to get BGM duration:', error);
-        bgmDuration = 180; // Default 3 minutes
-      }
-    }
-
-    // Get narration duration if exists
-    let narrationDuration = 0;
-    if (narrationPath) {
-      try {
-        const narrationMetadata = await this.getAudioDuration(narrationPath);
-        narrationDuration = narrationMetadata;
-        console.log(`[ComposeAudioMix] Narration duration: ${narrationDuration}s`);
-      } catch (error) {
-        console.warn('Failed to get narration duration:', error);
-      }
-    } else if (videoMetadata.hasAudio) {
-      // If no separate narration file but video has audio, check video's audio duration
-      // This handles cases where narration was already merged into the video
+    // Check if video has audio longer than video (narration already merged)
+    let narrationDuration = narrationDurationFromFile;
+    if (!narrationPath && videoMetadata.hasAudio) {
       try {
         const videoAudioDuration = await this.getVideoAudioDuration(videoPath);
         if (videoAudioDuration > videoDuration) {
@@ -323,15 +363,21 @@ export class VideoComposer implements IVideoComposer {
       try {
         const command = ffmpeg(videoPath);
 
-        // Add BGM input with simple approach
+        // Add BGM input with dynamic loop calculation
         if (bgmPath) {
-          console.log(`[ComposeAudioMix] Adding BGM input for ${maxDuration}s (to cover narration)`);
-          debugLog(`[ComposeAudioMix] BGM strategy: simple input mapping`);
-          // Use simple input approach without complex looping
-          // Extended to cover both video AND narration duration
+          // Calculate required loops based on BGM and max duration
+          let requiredLoops = 10; // Default minimum
+          if (bgmDuration > 0 && maxDuration > 0) {
+            requiredLoops = Math.ceil((maxDuration / bgmDuration) * 1.1); // 10% buffer
+            requiredLoops = Math.max(requiredLoops, 1); // At least 1 loop
+            requiredLoops = Math.min(requiredLoops, CONFIG.MAX_BGM_LOOPS); // Cap to prevent memory issues
+          }
+          console.log(`[ComposeAudioMix] Adding BGM input: duration=${bgmDuration}s, maxNeeded=${maxDuration}s, loops=${requiredLoops}`);
+          debugLog(`[ComposeAudioMix] BGM strategy: dynamic loop calculation`);
+          // Use calculated loops to ensure BGM covers entire duration
           command.input(bgmPath).inputOptions([
-            '-stream_loop', '10',  // Fixed number of loops instead of calculation
-            '-t', maxDuration.toString() // Extended to cover narration
+            '-stream_loop', requiredLoops.toString(),
+            '-t', maxDuration.toString()
           ]);
         }
 
@@ -498,11 +544,15 @@ export class VideoComposer implements IVideoComposer {
             outputOptions.unshift('-map 1:a', '-map 0:v');
           } else if (narrationPath && !bgmPath) {
             // Narration only - map narration audio and video
-            const narrationIndex = videoMetadata.hasAudio ? 1 : 1;
-            outputOptions.unshift(`-map ${narrationIndex}:a`, '-map 0:v');
-          } else {
-            // Both BGM and narration - use first audio input (BGM)
+            // Input 0: video, Input 1: narration (no BGM)
             outputOptions.unshift('-map 1:a', '-map 0:v');
+          } else if (bgmPath && narrationPath) {
+            // Both BGM and narration - Input 0: video, Input 1: BGM, Input 2: narration
+            // Use amix filter for proper mixing, but fallback maps BGM (input 1)
+            outputOptions.unshift('-map 1:a', '-map 0:v');
+          } else {
+            // No BGM, no narration - preserve original if exists
+            outputOptions.unshift('-map 0:a?', '-map 0:v');
           }
         } else {
           // No additional audio - preserve original if exists
@@ -605,12 +655,24 @@ export class VideoComposer implements IVideoComposer {
         }
 
         // Find audio stream and get its duration
-        const audioStream = metadata.streams?.find((stream: any) => stream.codec_type === 'audio');
-        if (audioStream && audioStream.duration) {
-          resolve(parseFloat(audioStream.duration));
+        const audioStream = metadata.streams?.find((stream: { codec_type?: string }) => stream.codec_type === 'audio');
+        if (audioStream && audioStream.duration !== undefined) {
+          const duration = typeof audioStream.duration === 'string'
+            ? parseFloat(audioStream.duration)
+            : audioStream.duration;
+          if (!isNaN(duration) && duration > 0) {
+            resolve(duration);
+            return;
+          }
+        }
+
+        // Fallback to format duration with validation
+        const formatDuration = metadata.format?.duration;
+        if (formatDuration && !isNaN(formatDuration) && formatDuration > 0) {
+          resolve(formatDuration);
         } else {
-          // Fallback to format duration
-          resolve(metadata.format.duration || 0);
+          console.warn('[VideoAudioDuration] Unable to determine audio duration, returning 0');
+          resolve(0);
         }
       });
     });

@@ -117,14 +117,53 @@ export class AudioMixer implements IAudioMixer {
 
     const filterChain = filters.join(';');
     console.log(`[AudioMixer] Generated filter chain: ${filterChain}`);
-    
-    // Basic validation - check for common syntax issues
-    if (filterChain.includes('undefined') || filterChain.includes('NaN')) {
-      console.error('[AudioMixer] Invalid filter chain detected, contains undefined/NaN values');
-      return ''; // Return empty to avoid FFmpeg errors
+
+    // Comprehensive validation
+    if (!this.validateFilterChain(filterChain)) {
+      console.error('[AudioMixer] Filter chain validation failed');
+      return '';
     }
-    
+
     return filterChain;
+  }
+
+  /**
+   * Validate FFmpeg audio filter chain syntax
+   */
+  private validateFilterChain(filterChain: string): boolean {
+    if (!filterChain || filterChain.trim() === '') {
+      console.warn('[AudioMixer] Empty filter chain');
+      return false;
+    }
+
+    // Check for undefined/NaN/null values
+    if (filterChain.includes('undefined') || filterChain.includes('NaN') || filterChain.includes('null')) {
+      console.error('[AudioMixer] Filter chain contains invalid values (undefined/NaN/null)');
+      return false;
+    }
+
+    // Check for balanced brackets
+    const openBrackets = (filterChain.match(/\[/g) || []).length;
+    const closeBrackets = (filterChain.match(/\]/g) || []).length;
+    if (openBrackets !== closeBrackets) {
+      console.error(`[AudioMixer] Unbalanced brackets: ${openBrackets} open, ${closeBrackets} close`);
+      return false;
+    }
+
+    // Check for [mixed] output label (required for our audio mixing)
+    if (!filterChain.includes('[mixed]')) {
+      console.error('[AudioMixer] Missing [mixed] output label');
+      return false;
+    }
+
+    // Check for valid audio filter names
+    const validFilters = ['volume', 'adelay', 'afade', 'amix', 'anullsrc', 'atrim', 'apad'];
+    const hasValidFilter = validFilters.some(f => filterChain.includes(f));
+    if (!hasValidFilter) {
+      console.warn('[AudioMixer] No recognized audio filters found in chain');
+    }
+
+    return true;
   }
 
   /**

@@ -390,8 +390,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
       // 현재 자막의 종료 시간이 다음 자막의 시작 시간보다 늦으면
       if (current.endTime > next.startTime) {
-        // 다음 자막 시작 0.1초 전으로 조정
-        current.endTime = Math.max(current.startTime + 0.1, next.startTime - 0.1);
+        // 다음 자막 시작 0.05초 전으로 조정 (겹침 방지)
+        // 하지만 최소 0.1초는 보여야 함
+        const minEndTime = current.startTime + 0.1; // 최소 표시 시간
+        const maxEndTime = next.startTime - 0.05;   // 다음 자막 전 갭
+        current.endTime = Math.max(minEndTime, Math.min(current.endTime, maxEndTime));
+
+        // 극단적인 겹침 경고
+        if (current.endTime - current.startTime < 0.5) {
+          console.warn(`[SubtitleEngine] Subtitle ${i} shortened to ${(current.endTime - current.startTime).toFixed(2)}s due to overlap`);
+        }
       }
     }
 

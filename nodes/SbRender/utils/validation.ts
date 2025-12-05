@@ -20,6 +20,12 @@ export function validateVideoSource(params: ISbRenderNodeParams): void {
   }
 
   if (params.videoSource === 'url') {
+    // Type check - videoUrl must be a string
+    if (typeof params.videoUrl !== 'string') {
+      console.error('[SB Render] videoUrl is not a string:', typeof params.videoUrl, JSON.stringify(params.videoUrl).slice(0, 200));
+      throw new ValidationError(`Video URL must be a string, received: ${typeof params.videoUrl}`);
+    }
+
     if (!params.videoUrl || params.videoUrl.trim() === '') {
       throw new ValidationError('Video URL is required when video source is URL');
     }

@@ -357,8 +357,11 @@ export class VideoComposer implements IVideoComposer {
     }
 
     // Calculate maximum duration needed for BGM (to cover both video and narration)
-    const maxDuration = Math.max(videoDuration, narrationDuration) + 10;
-    console.log(`[ComposeAudioMix] Max duration for BGM: ${maxDuration}s (video: ${videoDuration}s, narration: ${narrationDuration}s)`);
+    // Validate durations to prevent NaN errors in FFmpeg
+    const safeVideoDuration = isNaN(videoDuration) || videoDuration <= 0 ? CONFIG.DEFAULT_DURATION : videoDuration;
+    const safeNarrationDuration = isNaN(narrationDuration) || narrationDuration < 0 ? 0 : narrationDuration;
+    const maxDuration = Math.max(safeVideoDuration, safeNarrationDuration) + 10;
+    console.log(`[ComposeAudioMix] Max duration for BGM: ${maxDuration}s (video: ${safeVideoDuration}s, narration: ${safeNarrationDuration}s)`);
 
     return new Promise((resolve, reject) => {
       try {
@@ -367,18 +370,22 @@ export class VideoComposer implements IVideoComposer {
         // Add BGM input with dynamic loop calculation
         if (bgmPath) {
           // Calculate required loops based on BGM and max duration
+          // Validate bgmDuration to prevent NaN
+          const safeBgmDuration = isNaN(bgmDuration) || bgmDuration <= 0 ? 180 : bgmDuration;
           let requiredLoops = 10; // Default minimum
-          if (bgmDuration > 0 && maxDuration > 0) {
-            requiredLoops = Math.ceil((maxDuration / bgmDuration) * 1.1); // 10% buffer
+          if (safeBgmDuration > 0 && maxDuration > 0) {
+            requiredLoops = Math.ceil((maxDuration / safeBgmDuration) * 1.1); // 10% buffer
             requiredLoops = Math.max(requiredLoops, 1); // At least 1 loop
             requiredLoops = Math.min(requiredLoops, CONFIG.MAX_BGM_LOOPS); // Cap to prevent memory issues
           }
-          console.log(`[ComposeAudioMix] Adding BGM input: duration=${bgmDuration}s, maxNeeded=${maxDuration}s, loops=${requiredLoops}`);
+          // Ensure maxDuration is valid for -t option
+          const safeTrimDuration = isNaN(maxDuration) || maxDuration <= 0 ? CONFIG.DEFAULT_DURATION + 10 : maxDuration;
+          console.log(`[ComposeAudioMix] Adding BGM input: duration=${safeBgmDuration}s, maxNeeded=${safeTrimDuration}s, loops=${requiredLoops}`);
           debugLog(`[ComposeAudioMix] BGM strategy: dynamic loop calculation`);
           // Use calculated loops to ensure BGM covers entire duration
           command.input(bgmPath).inputOptions([
             '-stream_loop', requiredLoops.toString(),
-            '-t', maxDuration.toString()
+            '-t', safeTrimDuration.toFixed(3)
           ]);
         }
 
@@ -501,10 +508,13 @@ export class VideoComposer implements IVideoComposer {
 
         // If narration is longer than target video duration, freeze last frame
         // This handles cases where narration is longer even after half frame rate
-        if (narrationDuration > targetVideoDuration) {
-          const freezeDuration = narrationDuration - targetVideoDuration;
-          videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration}`);
-          console.log(`[ComposeAudioMix] Extending video with freeze frame: +${freezeDuration}s`);
+        if (safeNarrationDuration > targetVideoDuration && safeNarrationDuration > 0) {
+          const freezeDuration = safeNarrationDuration - targetVideoDuration;
+          // Validate freezeDuration to prevent NaN errors
+          if (!isNaN(freezeDuration) && freezeDuration > 0) {
+            videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration.toFixed(3)}`);
+            console.log(`[ComposeAudioMix] Extending video with freeze frame: +${freezeDuration.toFixed(3)}s`);
+          }
         }
 
         // Add subtitle overlay if present
@@ -891,9 +901,11 @@ export class VideoComposer implements IVideoComposer {
               // Generate silent audio for this video using anullsrc
               // We use the video duration to trim the silence
               const duration = videoMetadataList[index].duration;
+              // Validate duration to prevent NaN errors in FFmpeg
+              const safeDuration = isNaN(duration) || duration <= 0 ? CONFIG.DEFAULT_DURATION : duration;
               // anullsrc generates infinite silence, we trim it to video duration
               // We use a unique label for this silence stream
-              audioFilters += `anullsrc=r=44100:cl=stereo,atrim=duration=${duration}[silence${index}];`;
+              audioFilters += `anullsrc=r=44100:cl=stereo,atrim=duration=${safeDuration.toFixed(3)}[silence${index}];`;
               audioStreams.push(`[silence${index}]`);
             }
           });
@@ -1005,11 +1017,14 @@ export class VideoComposer implements IVideoComposer {
 
         // Add all images as inputs with loop and duration
         imagePaths.forEach((imagePath, index) => {
+          // Validate duration to prevent NaN errors in FFmpeg
+          const duration = durations[index];
+          const safeDuration = isNaN(duration) || duration <= 0 ? CONFIG.DEFAULT_DURATION : duration;
           command
             .input(imagePath)
             .inputOptions([
               '-loop 1',
-              `-t ${durations[index]}`,
+              `-t ${safeDuration.toFixed(3)}`,
             ]);
         });
 

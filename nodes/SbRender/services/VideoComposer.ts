@@ -368,15 +368,18 @@ export class VideoComposer implements IVideoComposer {
         const videoFilters: string[] = [];
 
         // Half frame rate if enabled (doubles duration)
+        let currentVideoDuration = videoDuration;
         if (config.halfFrameRate) {
           // Slow down video by doubling PTS and maintaining consistent frame timing
           videoFilters.push('setpts=2.0*PTS');
+          currentVideoDuration *= 2;
         }
 
-        // If narration is longer than video AND sync enabled, freeze last frame
-        if (config.syncToAudio && narrationDuration > videoDuration) {
-          const freezeDuration = narrationDuration - videoDuration;
-          videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration}`);
+        // If narration is longer than video AND sync enabled, stretch video to match audio
+        if (config.syncToAudio && narrationDuration > currentVideoDuration) {
+          const slowDownFactor = narrationDuration / currentVideoDuration;
+          console.log(`[ComposeAudioMix] Syncing video to audio: slowing down by factor ${slowDownFactor.toFixed(4)}`);
+          videoFilters.push(`setpts=${slowDownFactor.toFixed(6)}*PTS`);
         }
 
         // Add subtitle overlay if present

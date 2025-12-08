@@ -1436,11 +1436,18 @@ export class SbRender implements INodeType {
               
               // Calculate effective duration if syncToAudio is enabled
               let effectiveDuration = metadata.duration;
+
+              // Account for Half Frame Rate (doubles the base duration)
+              if (params.halfFrameRate) {
+                effectiveDuration *= 2;
+                console.log(`[SbRender] HalfFrameRate enabled. Base duration doubled to: ${effectiveDuration}s`);
+              }
+
               if (params.syncToAudio && narrationPath) {
                 try {
                   const narrationDuration = await videoComposer.getAudioDuration(narrationPath);
-                  console.log(`[SbRender] SyncToAudio enabled. Video: ${metadata.duration}s, Narration: ${narrationDuration}s`);
-                  if (narrationDuration > metadata.duration) {
+                  console.log(`[SbRender] SyncToAudio enabled. Video (adjusted): ${effectiveDuration}s, Narration: ${narrationDuration}s`);
+                  if (narrationDuration > effectiveDuration) {
                     effectiveDuration = narrationDuration;
                     console.log(`[SbRender] Extending video duration to match narration: ${effectiveDuration}s`);
                   }

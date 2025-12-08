@@ -34,7 +34,10 @@ export class AudioMixer implements IAudioMixer {
       config.videoDuration = 10;
     }
 
-    console.log(`[AudioMixer] Building filter chain - BGM: ${!!config.bgmPath}, Narration: ${!!config.narrationPath}, OriginalAudio: ${hasOriginalAudio}`);
+    // Store video duration for final trim
+    const videoDuration = config.videoDuration;
+
+    console.log(`[AudioMixer] Building filter chain - BGM: ${!!config.bgmPath}, Narration: ${!!config.narrationPath}, OriginalAudio: ${hasOriginalAudio}, VideoDuration: ${videoDuration}s`);
 
     // Handle original video audio
     if (hasOriginalAudio) {
@@ -100,19 +103,20 @@ export class AudioMixer implements IAudioMixer {
     }
 
     if (inputs.length === 1) {
-      // Only one audio source, just use it directly
+      // Only one audio source, trim to video duration
       const singleInput = inputs[0];
-      // Remove 'acopy' as it might not be recognized in some FFmpeg versions
-      filters.push(`${singleInput}anull[mixed]`);
+      filters.push(`${singleInput}atrim=0:${videoDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`);
+      console.log(`[AudioMixer] Single audio source, trimming to ${videoDuration}s`);
     } else {
       // Mix multiple audio sources
-      // Use 'longest' to ensure BGM continues for entire video duration
+      // Use 'longest' to ensure all audio is captured, then trim to video duration
       const mixInputs = inputs.join('');
-      
-      // Simple mix without problematic options that may not be supported
+
+      // Mix audio sources, then trim to video duration to prevent audio extending past video
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest,atrim=0:${videoDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
       );
+      console.log(`[AudioMixer] Mixed ${inputs.length} sources, trimming to ${videoDuration}s`);
     }
 
     const filterChain = filters.join(';');

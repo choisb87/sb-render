@@ -63,8 +63,14 @@ export class AudioMixer implements IAudioMixer {
         bgmFilter += `,afade=t=in:ss=0:d=${bgmFadeIn}`;
         console.log(`[AudioMixer] Adding BGM fade in: ${bgmFadeIn}s`);
       }
-      // Note: Fade out will be handled at the end based on actual mixed duration
-      // For now, we don't apply fade out to BGM to preserve narration length
+      
+      // Add fade out if specified and valid
+      const bgmFadeOut = config.bgmFadeOut || 0;
+      if (bgmFadeOut > 0 && !isNaN(bgmFadeOut) && videoDuration > bgmFadeOut) {
+        const fadeOutStart = videoDuration - bgmFadeOut;
+        bgmFilter += `,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${bgmFadeOut}`;
+        console.log(`[AudioMixer] Adding BGM fade out: ${bgmFadeOut}s starting at ${fadeOutStart.toFixed(3)}s`);
+      }
 
       bgmFilter += `[bgm]`;
 

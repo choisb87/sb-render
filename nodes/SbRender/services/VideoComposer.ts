@@ -1,37 +1,13 @@
 import { promises as fs, appendFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
-import { execSync } from 'child_process';
 import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../interfaces';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
 const DEBUG_MODE = process.env.SB_RENDER_DEBUG === 'true';
 const DEBUG_LOG_PATH = '/tmp/sb-render-debug.log';
-
-// Configuration constants
-const CONFIG = {
-  // Video defaults
-  DEFAULT_WIDTH: 1920,
-  DEFAULT_HEIGHT: 1080,
-  DEFAULT_FPS: 24,
-  DEFAULT_DURATION: 30,
-
-  // Audio defaults
-  AUDIO_SAMPLE_RATE: 44100,
-  AUDIO_CHANNELS: 2,
-  AUDIO_BITRATE: '192k',
-  DEFAULT_BGM_VOLUME: 30,
-  DEFAULT_NARRATION_VOLUME: 100,
-
-  // Timeouts (in milliseconds)
-  FFMPEG_TIMEOUT_MS: 3600000, // 1 hour for long videos
-  FFPROBE_TIMEOUT_MS: 30000,  // 30 seconds for metadata
-
-  // Limits
-  MAX_BGM_LOOPS: 100,
-  MIN_SUBTITLE_DURATION: 0.1,
-  SUBTITLE_GAP: 0.05,
-} as const;
 
 // Helper function for debug logging
 function debugLog(message: string): void {
@@ -41,135 +17,63 @@ function debugLog(message: string): void {
   }
 }
 
-/**
- * Create a timeout wrapper for FFmpeg commands
- */
-function createTimeoutPromise<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  operationName: string,
-  cleanup?: () => void
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      if (cleanup) cleanup();
-      reject(new Error(`[${operationName}] Operation timed out after ${timeoutMs / 1000}s`));
-    }, timeoutMs);
-
-    promise
-      .then((result) => {
-        clearTimeout(timeoutId);
-        resolve(result);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
-  });
-}
-
-/**
- * Check if a command is available in the system
- */
-function isCommandAvailable(command: string): boolean {
-  try {
-    execSync(`which ${command}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Fix permissions for npm-installed binaries
- */
-function fixBinaryPermissions(binaryPath: string): boolean {
-  try {
-    if (existsSync(binaryPath)) {
-      execSync(`chmod +x "${binaryPath}"`, { stdio: 'ignore' });
-      return true;
-    }
-  } catch (error) {
-    debugLog(`[VideoComposer] Failed to fix permissions for ${binaryPath}: ${error}`);
-  }
-  return false;
-}
-
-// Set FFmpeg and FFprobe paths with intelligent fallback strategy
-// Priority: 1. System binaries (most reliable in Docker)
-//           2. npm packages with permission fix
-//           3. Graceful degradation
+// Set FFmpeg and FFprobe paths with validation
 try {
-  let ffmpegPath: string | undefined;
-  let ffprobePath: string | undefined;
+  const ffmpegPath = ffmpegInstaller.path;
+  const ffprobePath = ffprobeInstaller.path;
 
-  // STRATEGY 1: Try system binaries first (best for Docker/n8n)
-  if (isCommandAvailable('ffmpeg')) {
-    ffmpegPath = 'ffmpeg';
-    console.log('[VideoComposer] ✅ Using system ffmpeg');
-    debugLog('[VideoComposer] Using system ffmpeg');
-  }
-
-  if (isCommandAvailable('ffprobe')) {
-    ffprobePath = 'ffprobe';
-    console.log('[VideoComposer] ✅ Using system ffprobe');
-    debugLog('[VideoComposer] Using system ffprobe');
-  }
-
-  // STRATEGY 2: Try npm-installed binaries if system binaries not available
-  if (!ffmpegPath || !ffprobePath) {
+  // Validate that binaries actually exist (critical for n8n environment)
+  if (!existsSync(ffmpegPath)) {
+    console.error(`[VideoComposer] FFmpeg binary not found at: ${ffmpegPath}`);
+    debugLog(`[VideoComposer] FFmpeg binary missing: ${ffmpegPath}`);
+    
+    // Try system ffmpeg as fallback
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
-
-      if (!ffmpegPath && ffmpegInstaller.path) {
-        if (existsSync(ffmpegInstaller.path)) {
-          // Try to fix permissions
-          fixBinaryPermissions(ffmpegInstaller.path);
-          ffmpegPath = ffmpegInstaller.path;
-          console.log(`[VideoComposer] ✅ Using npm ffmpeg: ${ffmpegPath}`);
-          debugLog(`[VideoComposer] Using npm ffmpeg: ${ffmpegPath}`);
-        }
-      }
-
-      if (!ffprobePath && ffprobeInstaller.path) {
-        if (existsSync(ffprobeInstaller.path)) {
-          // Try to fix permissions
-          fixBinaryPermissions(ffprobeInstaller.path);
-          ffprobePath = ffprobeInstaller.path;
-          console.log(`[VideoComposer] ✅ Using npm ffprobe: ${ffprobePath}`);
-          debugLog(`[VideoComposer] Using npm ffprobe: ${ffprobePath}`);
-        }
-      }
-    } catch (npmError) {
-      console.warn('[VideoComposer] npm ffmpeg/ffprobe packages not available:', npmError);
-      debugLog(`[VideoComposer] npm packages unavailable: ${npmError}`);
+      ffmpeg.setFfmpegPath('ffmpeg');
+      console.warn('[VideoComposer] Using system ffmpeg as fallback');
+      debugLog('[VideoComposer] Using system ffmpeg as fallback');
+    } catch (systemError) {
+      throw new Error(`FFmpeg binary not found at ${ffmpegPath} and system ffmpeg unavailable`);
     }
-  }
-
-  // Set the paths in fluent-ffmpeg
-  if (ffmpegPath) {
+  } else {
     ffmpeg.setFfmpegPath(ffmpegPath);
-  } else {
-    console.error('[VideoComposer] ⚠️  No FFmpeg found - video operations will fail');
-    debugLog('[VideoComposer] No FFmpeg available');
+    console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegPath}`);
+    debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegPath}`);
   }
 
-  if (ffprobePath) {
+  if (!existsSync(ffprobePath)) {
+    console.error(`[VideoComposer] FFprobe binary not found at: ${ffprobePath}`);
+    debugLog(`[VideoComposer] FFprobe binary missing: ${ffprobePath}`);
+    
+    // Try system ffprobe as fallback
+    try {
+      ffmpeg.setFfprobePath('ffprobe');
+      console.warn('[VideoComposer] Using system ffprobe as fallback');
+      debugLog('[VideoComposer] Using system ffprobe as fallback');
+    } catch (systemError) {
+      console.warn('[VideoComposer] System ffprobe also unavailable, metadata detection will be limited');
+      debugLog('[VideoComposer] System ffprobe unavailable, will use fallback metadata');
+      // Don't throw - we'll handle this gracefully in getVideoMetadata
+    }
+  } else {
     ffmpeg.setFfprobePath(ffprobePath);
-  } else {
-    console.warn('[VideoComposer] ⚠️  No FFprobe found - metadata detection will be limited');
-    debugLog('[VideoComposer] No FFprobe available - will use fallback metadata');
+    console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobePath}`);
+    debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobePath}`);
   }
-
-  // Log final configuration
-  console.log('[VideoComposer] 🎬 FFmpeg configuration complete');
-  debugLog(`[VideoComposer] Final config - FFmpeg: ${ffmpegPath || 'none'}, FFprobe: ${ffprobePath || 'none'}`);
 } catch (error) {
-  console.error('[VideoComposer] ⚠️  Failed to initialize FFmpeg/FFprobe:', error);
+  console.error('[VideoComposer] CRITICAL: Failed to initialize FFmpeg/FFprobe:', error);
   debugLog(`[VideoComposer] Initialization error: ${error}`);
+  
+  // Final fallback: try system binaries
+  try {
+    ffmpeg.setFfmpegPath('ffmpeg');
+    ffmpeg.setFfprobePath('ffprobe');
+    console.warn('[VideoComposer] Using system ffmpeg/ffprobe binaries as last resort');
+    debugLog('[VideoComposer] Using system binaries as last resort');
+  } catch (systemError) {
+    console.error('[VideoComposer] No FFmpeg/FFprobe available - operations will be limited');
+    debugLog('[VideoComposer] No FFmpeg available - critical error');
+  }
 }
 
 /**
@@ -206,8 +110,7 @@ export class VideoComposer implements IVideoComposer {
           // __dirname is dist/nodes/SbRender/services, go up 4 levels to package root
           const fontsDir = join(dirname(dirname(dirname(dirname(__dirname)))), 'fonts');
           const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/:/g, '\\:');
-          // Use 'subtitles' filter instead of 'ass' - handles both SRT and ASS formats
-          videoFilters.push(`subtitles=${escapedPath}:fontsdir=${escapedFontsDir}`);
+          videoFilters.push(`ass=${escapedPath}:fontsdir=${escapedFontsDir}`);
         }
 
         // Apply video filters if any
@@ -296,96 +199,82 @@ export class VideoComposer implements IVideoComposer {
     outputPath: string,
     config: ISbRenderNodeParams,
   ): Promise<Buffer> {
-    // Parallel metadata detection with timeout protection
-    console.log('[ComposeAudioMix] Starting parallel metadata detection...');
-    const metadataStart = Date.now();
-
-    // Create promises for all metadata we need
-    const videoMetadataPromise = this.getVideoMetadata(videoPath)
-      .catch((error) => {
-        console.warn('[ComposeAudioMix] Video metadata failed, trying fallback:', error.message);
-        return this.getFallbackDuration(videoPath)
-          .then((duration) => ({
-            duration,
-            width: CONFIG.DEFAULT_WIDTH,
-            height: CONFIG.DEFAULT_HEIGHT,
-            hasAudio: true,
-            videoCodec: 'unknown'
-          }))
-          .catch(() => ({
-            duration: CONFIG.DEFAULT_DURATION,
-            width: CONFIG.DEFAULT_WIDTH,
-            height: CONFIG.DEFAULT_HEIGHT,
-            hasAudio: true,
-            videoCodec: 'unknown'
-          }));
-      });
-
-    const bgmDurationPromise = bgmPath
-      ? this.getAudioDuration(bgmPath).catch(() => 180)
-      : Promise.resolve(0);
-
-    const narrationDurationPromise = narrationPath
-      ? this.getAudioDuration(narrationPath).catch(() => 0)
-      : Promise.resolve(0);
-
-    // Run all metadata detection in parallel with timeout
-    const [videoMetadata, bgmDuration, narrationDurationFromFile] = await createTimeoutPromise(
-      Promise.all([videoMetadataPromise, bgmDurationPromise, narrationDurationPromise]),
-      CONFIG.FFPROBE_TIMEOUT_MS,
-      'MetadataDetection'
-    );
-
-    console.log(`[ComposeAudioMix] Metadata detection completed in ${Date.now() - metadataStart}ms`);
-    console.log(`[ComposeAudioMix] Video: ${videoMetadata.duration}s, BGM: ${bgmDuration}s, Narration: ${narrationDurationFromFile}s`);
-    debugLog(`[ComposeAudioMix] Video metadata: ${JSON.stringify(videoMetadata)}`);
-
-    const videoDuration = videoMetadata.duration;
-
-    // Check if video has audio longer than video (narration already merged)
-    let narrationDuration = narrationDurationFromFile;
-    if (!narrationPath && videoMetadata.hasAudio) {
+    // Get video duration with better error handling for n8n
+    let videoMetadata: IVideoMetadata;
+    try {
+      videoMetadata = await this.getVideoMetadata(videoPath);
+      console.log(`[ComposeAudioMix] Video metadata: duration=${videoMetadata.duration}s, hasAudio=${videoMetadata.hasAudio}`);
+      debugLog(`[ComposeAudioMix] Video metadata: ${JSON.stringify(videoMetadata)}`);
+    } catch (error) {
+      console.warn('[ComposeAudioMix] Failed to get video metadata, using fallback duration detection');
+      debugLog(`[ComposeAudioMix] Metadata detection failed: ${error}`);
+      
+      // Fallback: Use ffprobe directly on video to get duration
       try {
-        const videoAudioDuration = await this.getVideoAudioDuration(videoPath);
-        if (videoAudioDuration > videoDuration) {
-          narrationDuration = videoAudioDuration;
-          console.log(`[ComposeAudioMix] Video contains audio longer than video: ${videoAudioDuration}s`);
-        }
-      } catch (error) {
-        console.warn('Failed to get video audio duration:', error);
+        const fallbackDuration = await this.getFallbackDuration(videoPath);
+        videoMetadata = {
+          duration: fallbackDuration,
+          width: 1920,
+          height: 1080,
+          hasAudio: true, // Assume audio exists in n8n to preserve it
+          videoCodec: 'unknown'
+        };
+        console.log(`[ComposeAudioMix] Using fallback duration: ${fallbackDuration}s`);
+      } catch (fallbackError) {
+        console.warn('[ComposeAudioMix] Fallback duration detection also failed, using 30s default');
+        videoMetadata = {
+          duration: 30, // Conservative default for multiple merged videos
+          width: 1920,
+          height: 1080,
+          hasAudio: true,
+          videoCodec: 'unknown'
+        };
       }
     }
 
-    // Calculate maximum duration needed for BGM (to cover both video and narration)
-    // Validate durations to prevent NaN errors in FFmpeg
-    const safeVideoDuration = isNaN(videoDuration) || videoDuration <= 0 ? CONFIG.DEFAULT_DURATION : videoDuration;
-    const safeNarrationDuration = isNaN(narrationDuration) || narrationDuration < 0 ? 0 : narrationDuration;
-    const maxDuration = Math.max(safeVideoDuration, safeNarrationDuration) + 10;
-    console.log(`[ComposeAudioMix] Max duration for BGM: ${maxDuration}s (video: ${safeVideoDuration}s, narration: ${safeNarrationDuration}s)`);
+    const videoDuration = videoMetadata.duration;
+
+    // Get BGM duration if exists
+    let bgmDuration = 0;
+    if (bgmPath) {
+      try {
+        bgmDuration = await this.getAudioDuration(bgmPath);
+        console.log(`[ComposeAudioMix] BGM duration: ${bgmDuration}s, video duration: ${videoDuration}s`);
+        debugLog(`[ComposeAudioMix] BGM duration: ${bgmDuration}s`);
+      } catch (error) {
+        console.warn('Failed to get BGM duration:', error);
+        bgmDuration = 180; // Default 3 minutes
+      }
+    }
+
+    // Get narration duration if exists
+    let narrationDuration = 0;
+    if (narrationPath) {
+      try {
+        const narrationMetadata = await this.getAudioDuration(narrationPath);
+        narrationDuration = narrationMetadata;
+        console.log(`[ComposeAudioMix] Narration duration: ${narrationDuration}s`);
+      } catch (error) {
+        console.warn('Failed to get narration duration:', error);
+      }
+    }
+
+    // Calculate effective duration (max of video and narration) to ensure BGM covers the whole duration
+    const effectiveDuration = Math.max(videoDuration, narrationDuration);
+    console.log(`[ComposeAudioMix] Effective duration for BGM: ${effectiveDuration}s (Video: ${videoDuration}s, Narration: ${narrationDuration}s)`);
 
     return new Promise((resolve, reject) => {
       try {
         const command = ffmpeg(videoPath);
 
-        // Add BGM input with dynamic loop calculation
+        // Add BGM input with simple approach
         if (bgmPath) {
-          // Calculate required loops based on BGM and max duration
-          // Validate bgmDuration to prevent NaN
-          const safeBgmDuration = isNaN(bgmDuration) || bgmDuration <= 0 ? 180 : bgmDuration;
-          let requiredLoops = 10; // Default minimum
-          if (safeBgmDuration > 0 && maxDuration > 0) {
-            requiredLoops = Math.ceil((maxDuration / safeBgmDuration) * 1.1); // 10% buffer
-            requiredLoops = Math.max(requiredLoops, 1); // At least 1 loop
-            requiredLoops = Math.min(requiredLoops, CONFIG.MAX_BGM_LOOPS); // Cap to prevent memory issues
-          }
-          // Ensure maxDuration is valid for -t option
-          const safeTrimDuration = isNaN(maxDuration) || maxDuration <= 0 ? CONFIG.DEFAULT_DURATION + 10 : maxDuration;
-          console.log(`[ComposeAudioMix] Adding BGM input: duration=${safeBgmDuration}s, maxNeeded=${safeTrimDuration}s, loops=${requiredLoops}`);
-          debugLog(`[ComposeAudioMix] BGM strategy: dynamic loop calculation`);
-          // Use calculated loops to ensure BGM covers entire duration
+          console.log(`[ComposeAudioMix] Adding BGM input for ${effectiveDuration}s video`);
+          debugLog(`[ComposeAudioMix] BGM strategy: simple input mapping`);
+          // Use simple input approach without complex looping
           command.input(bgmPath).inputOptions([
-            '-stream_loop', requiredLoops.toString(),
-            '-t', safeTrimDuration.toFixed(3)
+            '-stream_loop', '-1',  // Infinite loop to cover any duration
+            '-t', (effectiveDuration + 10).toString() // Buffer time based on effective duration
           ]);
         }
 
@@ -419,15 +308,6 @@ export class VideoComposer implements IVideoComposer {
           finalAudioFilterChain = audioMixer.getAudioFilterChain(audioConfig, videoMetadata.hasAudio);
           console.log(`[ComposeAudioMix] Generated filter chain: "${finalAudioFilterChain}"`);
           debugLog(`[ComposeAudioMix] Generated filter chain: ${finalAudioFilterChain}`);
-
-          // If Half Frame Rate is enabled, pad audio to match doubled video duration
-          if (config.halfFrameRate && finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
-            const paddedVideoDuration = videoDuration * 2;
-            // Add apad filter to extend audio with silence to match video duration
-            finalAudioFilterChain = finalAudioFilterChain.replace('[mixed]', `,apad=whole_dur=${paddedVideoDuration}[mixed]`);
-            console.log(`[ComposeAudioMix] Padding audio to ${paddedVideoDuration}s for Half Frame Rate`);
-            debugLog(`[ComposeAudioMix] Audio padding filter added: whole_dur=${paddedVideoDuration}`);
-          }
         }
 
         // Apply complex audio filter with fallback to simple approach
@@ -449,7 +329,7 @@ export class VideoComposer implements IVideoComposer {
             
             // Fallback to simple audio mapping
             finalAudioFilterChain = '';
-
+            
             // Simple audio mapping based on what inputs we have
             if (bgmPath && narrationPath) {
               // Use simple audio filters instead of complex filter
@@ -487,34 +367,16 @@ export class VideoComposer implements IVideoComposer {
         // Video filters
         const videoFilters: string[] = [];
 
-        // Calculate target video duration based on options
-        let targetVideoDuration = videoDuration;
-
+        // Half frame rate if enabled (doubles duration)
         if (config.halfFrameRate) {
-          // Half frame rate doubles the video duration by stretching PTS
+          // Slow down video by doubling PTS and maintaining consistent frame timing
           videoFilters.push('setpts=2.0*PTS');
-          targetVideoDuration = videoDuration * 2;
-          console.log(`[ComposeAudioMix] Half frame rate: ${videoDuration}s → ${targetVideoDuration}s (setpts=2.0*PTS)`);
-          debugLog(`[ComposeAudioMix] Video PTS doubled for half frame rate`);
-        } else if (config.syncToAudio && narrationDuration > 0) {
-          // Sync to audio: stretch/compress video to match narration duration using setpts
-          // setpts multiplier: >1 = slower/longer, <1 = faster/shorter
-          const ptsFactor = narrationDuration / videoDuration;
-          videoFilters.push(`setpts=${ptsFactor.toFixed(4)}*PTS`);
-          targetVideoDuration = narrationDuration;
-          console.log(`[ComposeAudioMix] Sync to audio: ${videoDuration}s → ${targetVideoDuration}s (setpts=${ptsFactor.toFixed(4)}*PTS)`);
-          debugLog(`[ComposeAudioMix] Video PTS adjustment: ${ptsFactor.toFixed(4)}x for audio sync`);
         }
 
-        // If narration is longer than target video duration, freeze last frame
-        // This handles cases where narration is longer even after half frame rate
-        if (safeNarrationDuration > targetVideoDuration && safeNarrationDuration > 0) {
-          const freezeDuration = safeNarrationDuration - targetVideoDuration;
-          // Validate freezeDuration to prevent NaN errors
-          if (!isNaN(freezeDuration) && freezeDuration > 0) {
-            videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration.toFixed(3)}`);
-            console.log(`[ComposeAudioMix] Extending video with freeze frame: +${freezeDuration.toFixed(3)}s`);
-          }
+        // If narration is longer than video AND sync enabled, freeze last frame
+        if (config.syncToAudio && narrationDuration > videoDuration) {
+          const freezeDuration = narrationDuration - videoDuration;
+          videoFilters.push(`tpad=stop_mode=clone:stop_duration=${freezeDuration}`);
         }
 
         // Add subtitle overlay if present
@@ -523,8 +385,7 @@ export class VideoComposer implements IVideoComposer {
           // __dirname is dist/nodes/SbRender/services, go up 4 levels to package root
           const fontsDir = join(dirname(dirname(dirname(dirname(__dirname)))), 'fonts');
           const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/:/g, '\\:');
-          // Use 'subtitles' filter instead of 'ass' - handles both SRT and ASS formats
-          videoFilters.push(`subtitles=${escapedPath}:fontsdir=${escapedFontsDir}`);
+          videoFilters.push(`ass=${escapedPath}:fontsdir=${escapedFontsDir}`);
         }
 
         if (videoFilters.length > 0) {
@@ -540,8 +401,10 @@ export class VideoComposer implements IVideoComposer {
           '-movflags +faststart',
         ];
 
-        // Note: Half frame rate is handled by setpts=2.0*PTS in video filters
-        // No need to change output frame rate here
+        // Add explicit frame rate for half frame rate mode to ensure proper playback
+        if (config.halfFrameRate) {
+          outputOptions.push('-r 24');
+        }
 
         // Map video and mixed audio with safe fallback
         if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
@@ -556,15 +419,11 @@ export class VideoComposer implements IVideoComposer {
             outputOptions.unshift('-map 1:a', '-map 0:v');
           } else if (narrationPath && !bgmPath) {
             // Narration only - map narration audio and video
-            // Input 0: video, Input 1: narration (no BGM)
-            outputOptions.unshift('-map 1:a', '-map 0:v');
-          } else if (bgmPath && narrationPath) {
-            // Both BGM and narration - Input 0: video, Input 1: BGM, Input 2: narration
-            // Use amix filter for proper mixing, but fallback maps BGM (input 1)
-            outputOptions.unshift('-map 1:a', '-map 0:v');
+            const narrationIndex = videoMetadata.hasAudio ? 1 : 1;
+            outputOptions.unshift(`-map ${narrationIndex}:a`, '-map 0:v');
           } else {
-            // No BGM, no narration - preserve original if exists
-            outputOptions.unshift('-map 0:a?', '-map 0:v');
+            // Both BGM and narration - use first audio input (BGM)
+            outputOptions.unshift('-map 1:a', '-map 0:v');
           }
         } else {
           // No additional audio - preserve original if exists
@@ -655,42 +514,6 @@ export class VideoComposer implements IVideoComposer {
   }
 
   /**
-   * Get video's audio track duration
-   * This is useful when video has audio that might be longer than video duration
-   */
-  async getVideoAudioDuration(videoPath: string): Promise<number> {
-    return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(videoPath, (error, metadata) => {
-        if (error) {
-          reject(new Error(`Failed to get video audio duration: ${error.message}`));
-          return;
-        }
-
-        // Find audio stream and get its duration
-        const audioStream = metadata.streams?.find((stream: { codec_type?: string }) => stream.codec_type === 'audio');
-        if (audioStream && audioStream.duration !== undefined) {
-          const duration = typeof audioStream.duration === 'string'
-            ? parseFloat(audioStream.duration)
-            : audioStream.duration;
-          if (!isNaN(duration) && duration > 0) {
-            resolve(duration);
-            return;
-          }
-        }
-
-        // Fallback to format duration with validation
-        const formatDuration = metadata.format?.duration;
-        if (formatDuration && !isNaN(formatDuration) && formatDuration > 0) {
-          resolve(formatDuration);
-        } else {
-          console.warn('[VideoAudioDuration] Unable to determine audio duration, returning 0');
-          resolve(0);
-        }
-      });
-    });
-  }
-
-  /**
    * Get video metadata (duration, resolution, codec)
    */
   async getVideoMetadata(videoPath: string): Promise<IVideoMetadata> {
@@ -700,8 +523,15 @@ export class VideoComposer implements IVideoComposer {
       // Also write to file for n8n debugging
       debugLog(`${logMsg}`);
 
-      // FFprobe path is already configured at module initialization
-      // No need to reconfigure here
+      // Try to use ffprobe
+      // Ensure path is set in case n8n environment is different
+      try {
+        ffmpeg.setFfprobePath(ffprobeInstaller.path);
+        debugLog(`[Metadata] FFprobe path reconfirmed: ${ffprobeInstaller.path}`);
+      } catch (e) {
+        console.warn('[Metadata] Could not set ffprobe path:', e);
+        debugLog(`[Metadata] FFprobe path setting failed: ${e}`);
+      }
 
       ffmpeg.ffprobe(videoPath, (error, metadata) => {
         if (error) {
@@ -731,23 +561,8 @@ export class VideoComposer implements IVideoComposer {
         const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
         const audioStream = metadata.streams.find((s) => s.codec_type === 'audio');
 
-        // Extract frame rate from video stream
-        let fps: number | undefined;
-        if (videoStream) {
-          // r_frame_rate is a fraction like "24/1" or "30000/1001"
-          const frameRateStr = videoStream.r_frame_rate || videoStream.avg_frame_rate;
-          if (frameRateStr) {
-            const [num, den] = frameRateStr.split('/').map(Number);
-            if (den && den > 0) {
-              fps = num / den;
-              console.log(`[Metadata] Detected frame rate: ${fps.toFixed(2)}fps (${frameRateStr})`);
-              debugLog(`[Metadata] Frame rate: ${fps}fps from ${frameRateStr}`);
-            }
-          }
-        }
-
         const streamInfo = {
-          videoStream: videoStream ? `${videoStream.codec_name} ${videoStream.width}x${videoStream.height} @${fps?.toFixed(2) || '?'}fps` : 'none',
+          videoStream: videoStream ? `${videoStream.codec_name} ${videoStream.width}x${videoStream.height}` : 'none',
           audioStream: audioStream ? `${audioStream.codec_name} channels=${audioStream.channels}` : 'none'
         };
         console.log(`[Metadata] Streams found:`, streamInfo);
@@ -772,7 +587,6 @@ export class VideoComposer implements IVideoComposer {
             hasAudio: hasValidAudio,
             videoCodec: 'unknown',
             audioCodec: audioStream?.codec_name,
-            fps: undefined,
           });
           return;
         }
@@ -784,7 +598,6 @@ export class VideoComposer implements IVideoComposer {
           hasAudio: hasValidAudio,
           videoCodec: videoStream.codec_name || 'unknown',
           audioCodec: audioStream?.codec_name,
-          fps: fps,
         };
 
         console.log(`[Metadata] ✅ Result:`, result);
@@ -886,7 +699,7 @@ export class VideoComposer implements IVideoComposer {
         if (allHaveAudio || hasMixedAudio) {
           // All videos have audio OR mixed audio - normalize video and ensure audio for all
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=24[v${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
           ).join(';');
 
           // Prepare audio streams
@@ -901,11 +714,9 @@ export class VideoComposer implements IVideoComposer {
               // Generate silent audio for this video using anullsrc
               // We use the video duration to trim the silence
               const duration = videoMetadataList[index].duration;
-              // Validate duration to prevent NaN errors in FFmpeg
-              const safeDuration = isNaN(duration) || duration <= 0 ? CONFIG.DEFAULT_DURATION : duration;
               // anullsrc generates infinite silence, we trim it to video duration
               // We use a unique label for this silence stream
-              audioFilters += `anullsrc=r=44100:cl=stereo,atrim=duration=${safeDuration.toFixed(3)}[silence${index}];`;
+              audioFilters += `anullsrc=r=44100:cl=stereo,atrim=duration=${duration}[silence${index}];`;
               audioStreams.push(`[silence${index}]`);
             }
           });
@@ -920,7 +731,7 @@ export class VideoComposer implements IVideoComposer {
         } else {
           // No videos have audio - normalize and concat video only
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=24[v${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
           ).join(';');
           const videoStreams = videoPaths.map((_, index) => `[v${index}]`).join('');
 
@@ -1017,21 +828,18 @@ export class VideoComposer implements IVideoComposer {
 
         // Add all images as inputs with loop and duration
         imagePaths.forEach((imagePath, index) => {
-          // Validate duration to prevent NaN errors in FFmpeg
-          const duration = durations[index];
-          const safeDuration = isNaN(duration) || duration <= 0 ? CONFIG.DEFAULT_DURATION : duration;
           command
             .input(imagePath)
             .inputOptions([
               '-loop 1',
-              `-t ${safeDuration.toFixed(3)}`,
+              `-t ${durations[index]}`,
             ]);
         });
 
         // Build filter to scale all images to 1920x1080 and concat
-        // Each image is scaled to fill 1920x1080 (16:9) and cropped to fit
+        // Each image is scaled to fit within 1920x1080 with padding (black bars) if needed
         const scaleFilters = imagePaths.map((_, index) =>
-          `[${index}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,fps=24[v${index}]`
+          `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
         ).join(';');
 
         const concatInputs = imagePaths.map((_, index) => `[v${index}]`).join('');

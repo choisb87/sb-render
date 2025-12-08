@@ -1433,10 +1433,26 @@ export class SbRender implements INodeType {
             let audioFilterChain = '';
             if (params.enableBGM || params.enableNarration) {
               console.log(`[SbRender] Setting up audio mix - BGM: ${!!bgmPath}, Narration: ${!!narrationPath}`);
-              console.log(`[SbRender] Video metadata - Duration: ${metadata.duration}s, HasAudio: ${metadata.hasAudio}`);
+              
+              // Calculate effective duration if syncToAudio is enabled
+              let effectiveDuration = metadata.duration;
+              if (params.syncToAudio && narrationPath) {
+                try {
+                  const narrationDuration = await videoComposer.getAudioDuration(narrationPath);
+                  console.log(`[SbRender] SyncToAudio enabled. Video: ${metadata.duration}s, Narration: ${narrationDuration}s`);
+                  if (narrationDuration > metadata.duration) {
+                    effectiveDuration = narrationDuration;
+                    console.log(`[SbRender] Extending video duration to match narration: ${effectiveDuration}s`);
+                  }
+                } catch (error) {
+                  console.warn('[SbRender] Failed to get narration duration for sync, using video duration:', error);
+                }
+              }
+
+              console.log(`[SbRender] Video metadata - Duration: ${metadata.duration}s, Effective Duration: ${effectiveDuration}s, HasAudio: ${metadata.hasAudio}`);
               
               const audioConfig: IAudioMixConfig = {
-                videoDuration: metadata.duration,
+                videoDuration: effectiveDuration,
                 bgmPath: bgmPath || undefined,
                 bgmVolume: params.bgmVolume ?? DEFAULT_VALUES.bgmVolume,
                 bgmFadeIn: params.bgmFadeIn ?? DEFAULT_VALUES.bgmFadeIn,

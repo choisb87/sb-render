@@ -380,6 +380,11 @@ export class VideoComposer implements IVideoComposer {
           const slowDownFactor = narrationDuration / currentVideoDuration;
           console.log(`[ComposeAudioMix] Syncing video to audio: slowing down by factor ${slowDownFactor.toFixed(4)}`);
           videoFilters.push(`setpts=${slowDownFactor.toFixed(6)}*PTS`);
+          
+          // IMPORTANT: When slowing down video significantly, frame rate drops.
+          // We must resample to a standard frame rate (e.g., 24fps) to ensure
+          // there are enough frames for subtitles to be rendered correctly.
+          videoFilters.push('fps=24');
         }
 
         // Add subtitle overlay if present

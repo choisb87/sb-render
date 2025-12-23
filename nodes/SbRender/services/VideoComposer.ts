@@ -706,8 +706,11 @@ export class VideoComposer implements IVideoComposer {
 
         if (allHaveAudio || hasMixedAudio) {
           // All videos have audio OR mixed audio - normalize video and ensure audio for all
+          // IMPORTANT: Do NOT use fps filter here - it resamples video frames independently of audio,
+          // causing audio-video desync that accumulates over time. The concat filter will handle
+          // frame timing correctly as long as all inputs have compatible parameters.
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1[v${index}]`
           ).join(';');
 
           // Prepare audio streams with fade in/out to prevent click sounds at segment boundaries
@@ -744,8 +747,9 @@ export class VideoComposer implements IVideoComposer {
           filterString = `${allFilters}${concatInputs}concat=n=${videoPaths.length}:v=1:a=1[outv][outa]`;
         } else {
           // No videos have audio - normalize and concat video only
+          // IMPORTANT: Do NOT use fps filter - preserve original frame timing
           const scaleFilters = videoPaths.map((_, index) =>
-            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
+            `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1[v${index}]`
           ).join(';');
           const videoStreams = videoPaths.map((_, index) => `[v${index}]`).join('');
 

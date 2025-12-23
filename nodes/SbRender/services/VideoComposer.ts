@@ -380,7 +380,7 @@ export class VideoComposer implements IVideoComposer {
           const slowDownFactor = narrationDuration / currentVideoDuration;
           console.log(`[ComposeAudioMix] Syncing video to audio: slowing down by factor ${slowDownFactor.toFixed(4)}`);
           videoFilters.push(`setpts=${slowDownFactor.toFixed(6)}*PTS`);
-          
+
           // IMPORTANT: When slowing down video significantly, frame rate drops.
           // We must resample to a standard frame rate (e.g., 24fps) to ensure
           // there are enough frames for subtitles to be rendered correctly.
@@ -710,18 +710,24 @@ export class VideoComposer implements IVideoComposer {
             `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
           ).join(';');
 
-          // Prepare audio streams
+          // Prepare audio streams with fade in/out to prevent click sounds at segment boundaries
+          // Short 50ms fades at boundaries eliminate audio discontinuity artifacts
+          const FADE_DURATION = 0.05; // 50ms fade to prevent click sounds
           const audioStreams: string[] = [];
           let audioFilters = '';
 
           videoPaths.forEach((_, index) => {
+            const duration = videoMetadataList[index].duration;
+            const fadeOutStart = Math.max(0, duration - FADE_DURATION);
+
             if (hasAudio[index]) {
-              // Use original audio
-              audioStreams.push(`[${index}:a]`);
+              // Apply fade in at start and fade out at end to prevent click sounds
+              // afade=t=in applies fade in, afade=t=out applies fade out
+              audioFilters += `[${index}:a]afade=t=in:st=0:d=${FADE_DURATION},afade=t=out:st=${fadeOutStart}:d=${FADE_DURATION}[a${index}];`;
+              audioStreams.push(`[a${index}]`);
             } else {
               // Generate silent audio for this video using anullsrc
               // We use the video duration to trim the silence
-              const duration = videoMetadataList[index].duration;
               // anullsrc generates infinite silence, we trim it to video duration
               // We use a unique label for this silence stream
               audioFilters += `anullsrc=r=44100:cl=stereo,atrim=duration=${duration}[silence${index}];`;

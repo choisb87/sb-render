@@ -108,21 +108,25 @@ export class AudioMixer implements IAudioMixer {
       return ''; // No audio to mix
     }
 
+    // Add a small buffer (0.5s) to prevent audio from being cut off prematurely
+    // This accounts for minor duration detection inaccuracies
+    const trimDuration = videoDuration + 0.5;
+
     if (inputs.length === 1) {
-      // Only one audio source, trim to video duration
+      // Only one audio source, trim to video duration with buffer
       const singleInput = inputs[0];
-      filters.push(`${singleInput}atrim=0:${videoDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`);
-      console.log(`[AudioMixer] Single audio source, trimming to ${videoDuration}s`);
+      filters.push(`${singleInput}atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`);
+      console.log(`[AudioMixer] Single audio source, trimming to ${trimDuration}s (video: ${videoDuration}s + 0.5s buffer)`);
     } else {
       // Mix multiple audio sources
-      // Use 'longest' to ensure all audio is captured, then trim to video duration
+      // Use 'longest' to ensure all audio is captured, then trim with buffer
       const mixInputs = inputs.join('');
 
-      // Mix audio sources, then trim to video duration to prevent audio extending past video
+      // Mix audio sources, then trim to video duration + buffer to prevent audio cut-off
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest,atrim=0:${videoDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest,atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
       );
-      console.log(`[AudioMixer] Mixed ${inputs.length} sources, trimming to ${videoDuration}s`);
+      console.log(`[AudioMixer] Mixed ${inputs.length} sources, trimming to ${trimDuration}s (video: ${videoDuration}s + 0.5s buffer)`);
     }
 
     const filterChain = filters.join(';');

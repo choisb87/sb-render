@@ -89,6 +89,12 @@ export class SbRender implements INodeType {
             description: 'Create video from multiple images with specified durations',
             action: 'Create video from images',
           },
+          {
+            name: 'Add Intro/Outro',
+            value: 'AddIntroOutro',
+            description: 'Add intro and/or outro videos to the main video',
+            action: 'Add intro and outro to video',
+          },
         ],
         default: 'Render',
       },
@@ -1252,6 +1258,313 @@ export class SbRender implements INodeType {
         description: 'Name of the binary property to store the output video',
       },
 
+      // === ADD INTRO/OUTRO SECTION ===
+      {
+        displayName: 'Main Video Source',
+        name: 'introOutroMainVideoSource',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        options: [
+          {
+            name: 'URL',
+            value: 'url',
+          },
+          {
+            name: 'Binary Data',
+            value: 'binary',
+          },
+        ],
+        default: 'url',
+        description: 'Source of the main video file',
+      },
+      {
+        displayName: 'Main Video URL',
+        name: 'introOutroMainVideoUrl',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            introOutroMainVideoSource: ['url'],
+          },
+        },
+        default: '',
+        placeholder: 'https://example.com/main-video.mp4',
+        description: 'URL of the main video',
+      },
+      {
+        displayName: 'Main Video Binary Property',
+        name: 'introOutroMainVideoBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            introOutroMainVideoSource: ['binary'],
+          },
+        },
+        default: 'data',
+        description: 'Name of the binary property containing the main video',
+      },
+      {
+        displayName: 'Add Intro',
+        name: 'enableIntro',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        default: false,
+        description: 'Whether to add an intro video at the beginning',
+      },
+      {
+        displayName: 'Intro Source',
+        name: 'introSource',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            enableIntro: [true],
+          },
+        },
+        options: [
+          {
+            name: 'URL',
+            value: 'url',
+          },
+          {
+            name: 'Binary Data',
+            value: 'binary',
+          },
+        ],
+        default: 'url',
+        description: 'Source of the intro video file',
+      },
+      {
+        displayName: 'Intro Video URL',
+        name: 'introUrl',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            enableIntro: [true],
+            introSource: ['url'],
+          },
+        },
+        default: '',
+        placeholder: 'https://example.com/intro.mp4',
+        description: 'URL of the intro video',
+      },
+      {
+        displayName: 'Intro Binary Property',
+        name: 'introBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            enableIntro: [true],
+            introSource: ['binary'],
+          },
+        },
+        default: 'intro',
+        description: 'Name of the binary property containing the intro video',
+      },
+      {
+        displayName: 'Add Outro',
+        name: 'enableOutro',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        default: false,
+        description: 'Whether to add an outro video at the end',
+      },
+      {
+        displayName: 'Outro Source',
+        name: 'outroSource',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            enableOutro: [true],
+          },
+        },
+        options: [
+          {
+            name: 'URL',
+            value: 'url',
+          },
+          {
+            name: 'Binary Data',
+            value: 'binary',
+          },
+        ],
+        default: 'url',
+        description: 'Source of the outro video file',
+      },
+      {
+        displayName: 'Outro Video URL',
+        name: 'outroUrl',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            enableOutro: [true],
+            outroSource: ['url'],
+          },
+        },
+        default: '',
+        placeholder: 'https://example.com/outro.mp4',
+        description: 'URL of the outro video',
+      },
+      {
+        displayName: 'Outro Binary Property',
+        name: 'outroBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            enableOutro: [true],
+            outroSource: ['binary'],
+          },
+        },
+        default: 'outro',
+        description: 'Name of the binary property containing the outro video',
+      },
+      {
+        displayName: 'Output Filename',
+        name: 'introOutroOutputFilename',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        default: 'video-with-intro-outro.mp4',
+        placeholder: 'video-with-intro-outro.mp4',
+        description: 'Filename for the output video',
+      },
+      {
+        displayName: 'Output Format',
+        name: 'introOutroOutputFormat',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        options: [
+          {
+            name: 'MP4',
+            value: 'mp4',
+          },
+          {
+            name: 'MOV',
+            value: 'mov',
+          },
+          {
+            name: 'WebM',
+            value: 'webm',
+          },
+        ],
+        default: 'mp4',
+        description: 'Output video format',
+      },
+      {
+        displayName: 'Video Codec',
+        name: 'introOutroVideoCodec',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        options: [
+          {
+            name: 'H.264 (Libx264)',
+            value: 'libx264',
+          },
+          {
+            name: 'H.265 (Libx265)',
+            value: 'libx265',
+          },
+          {
+            name: 'VP9',
+            value: 'vp9',
+          },
+        ],
+        default: 'libx264',
+        description: 'Video codec for encoding',
+      },
+      {
+        displayName: 'Quality',
+        name: 'introOutroQuality',
+        type: 'options',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        options: [
+          {
+            name: 'Low',
+            value: 'low',
+            description: 'CRF 28 - Smaller file size',
+          },
+          {
+            name: 'Medium',
+            value: 'medium',
+            description: 'CRF 23 - Balanced',
+          },
+          {
+            name: 'High',
+            value: 'high',
+            description: 'CRF 18 - Better quality',
+          },
+          {
+            name: 'Custom',
+            value: 'custom',
+            description: 'Specify custom CRF value',
+          },
+        ],
+        default: 'high',
+        description: 'Video quality setting',
+      },
+      {
+        displayName: 'Custom CRF',
+        name: 'introOutroCustomCRF',
+        type: 'number',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+            introOutroQuality: ['custom'],
+          },
+        },
+        default: 18,
+        typeOptions: {
+          minValue: 0,
+          maxValue: 51,
+        },
+        description: 'Custom CRF value (0-51, lower = better quality)',
+      },
+      {
+        displayName: 'Output Binary Property',
+        name: 'introOutroOutputBinaryProperty',
+        type: 'string',
+        displayOptions: {
+          show: {
+            operation: ['AddIntroOutro'],
+          },
+        },
+        default: 'data',
+        description: 'Name of the binary property to store the output video',
+      },
+
       // === DEBUG OPTIONS ===
       {
         displayName: 'Debug Mode',
@@ -1860,6 +2173,123 @@ export class SbRender implements INodeType {
                   videoBuffer,
                   outputFilename,
                   `video/${imageToVideoOutputFormat}`,
+                ),
+              },
+              pairedItem: itemIndex,
+            };
+
+            console.log('[SB Render] Pushing result to returnData');
+            returnData.push(result);
+            console.log(`[SB Render] ReturnData length: ${returnData.length}`);
+          } else if (operation === 'AddIntroOutro') {
+            // Get AddIntroOutro parameters
+            const mainVideoSource = this.getNodeParameter('introOutroMainVideoSource', itemIndex, 'url') as 'url' | 'binary';
+            const enableIntro = this.getNodeParameter('enableIntro', itemIndex, false) as boolean;
+            const enableOutro = this.getNodeParameter('enableOutro', itemIndex, false) as boolean;
+            const outputFilename = this.getNodeParameter('introOutroOutputFilename', itemIndex, 'video-with-intro-outro.mp4') as string;
+            const outputFormat = this.getNodeParameter('introOutroOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
+            const videoCodec = this.getNodeParameter('introOutroVideoCodec', itemIndex, 'libx264') as 'libx264' | 'libx265' | 'vp9';
+            const quality = this.getNodeParameter('introOutroQuality', itemIndex, 'high') as 'low' | 'medium' | 'high' | 'custom';
+            const customCRF = this.getNodeParameter('introOutroCustomCRF', itemIndex, 18) as number;
+            const outputBinaryProperty = this.getNodeParameter('introOutroOutputBinaryProperty', itemIndex, 'data') as string;
+
+            console.log(`[SB Render] AddIntroOutro operation - Intro: ${enableIntro}, Outro: ${enableOutro}`);
+
+            if (!enableIntro && !enableOutro) {
+              throw new NodeOperationError(this.getNode(), 'At least one of Intro or Outro must be enabled', { itemIndex });
+            }
+
+            // Helper function to get video file
+            const getVideoFile = async (
+              source: 'url' | 'binary',
+              urlParamName: string,
+              binaryParamName: string,
+            ): Promise<string> => {
+              if (source === 'url') {
+                const url = this.getNodeParameter(urlParamName, itemIndex, '') as string;
+                if (!url) {
+                  throw new NodeOperationError(this.getNode(), `${urlParamName} is required`, { itemIndex });
+                }
+                return await fileManager.downloadFile(url);
+              } else {
+                const binaryPropertyName = this.getNodeParameter(binaryParamName, itemIndex, 'data') as string;
+                const binaryData = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
+                const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, binaryPropertyName);
+                const extension = binaryData.fileExtension || 'mp4';
+                return await fileManager.extractBinary(buffer, extension);
+              }
+            };
+
+            // Get main video
+            const mainVideoPath = await getVideoFile(
+              mainVideoSource,
+              'introOutroMainVideoUrl',
+              'introOutroMainVideoBinaryProperty',
+            );
+            console.log(`[SB Render] Main video path: ${mainVideoPath}`);
+
+            // Build video paths array in order: [intro, main, outro]
+            const videoPaths: string[] = [];
+
+            // Get intro video if enabled
+            if (enableIntro) {
+              const introSource = this.getNodeParameter('introSource', itemIndex, 'url') as 'url' | 'binary';
+              const introPath = await getVideoFile(
+                introSource,
+                'introUrl',
+                'introBinaryProperty',
+              );
+              videoPaths.push(introPath);
+              console.log(`[SB Render] Intro video path: ${introPath}`);
+            }
+
+            // Add main video
+            videoPaths.push(mainVideoPath);
+
+            // Get outro video if enabled
+            if (enableOutro) {
+              const outroSource = this.getNodeParameter('outroSource', itemIndex, 'url') as 'url' | 'binary';
+              const outroPath = await getVideoFile(
+                outroSource,
+                'outroUrl',
+                'outroBinaryProperty',
+              );
+              videoPaths.push(outroPath);
+              console.log(`[SB Render] Outro video path: ${outroPath}`);
+            }
+
+            console.log(`[SB Render] Merging ${videoPaths.length} videos (intro/main/outro)`);
+
+            // Create output path
+            const outputPath = await fileManager.createTempFile(`.${outputFormat}`);
+
+            // Use mergeVideos to combine all videos
+            const videoBuffer = await videoComposer.mergeVideos(
+              videoPaths,
+              outputPath,
+              videoCodec,
+              quality,
+              customCRF,
+              outputFormat,
+            );
+
+            console.log(`[SB Render] AddIntroOutro completed, buffer size: ${videoBuffer.length} bytes`);
+
+            // Return result with binary data
+            const result: INodeExecutionData = {
+              json: {
+                success: true,
+                hasIntro: enableIntro,
+                hasOutro: enableOutro,
+                videoCount: videoPaths.length,
+                outputSize: videoBuffer.length,
+                outputFilename: outputFilename,
+              },
+              binary: {
+                [outputBinaryProperty]: await this.helpers.prepareBinaryData(
+                  videoBuffer,
+                  outputFilename,
+                  `video/${outputFormat}`,
                 ),
               },
               pairedItem: itemIndex,

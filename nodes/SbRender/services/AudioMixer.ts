@@ -128,14 +128,15 @@ export class AudioMixer implements IAudioMixer {
     } else {
       // Mix multiple audio sources
       // Use 'longest' to ensure all audio is captured, then trim with buffer
-      // normalize=0 prevents amix from reducing volume (default behavior reduces by 1/n)
+      // amix default normalize=true reduces volume by 1/n, so we compensate with volume filter
       const mixInputs = inputs.join('');
+      const volumeCompensation = inputs.length; // Multiply volume by number of inputs to compensate
 
-      // Mix audio sources, then trim to effective duration + buffer to prevent audio cut-off
+      // Mix audio sources, compensate volume, then trim to effective duration + buffer
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:normalize=0,atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest,volume=${volumeCompensation},atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
       );
-      console.log(`[AudioMixer] Mixed ${inputs.length} sources with normalize=0, trimming to ${trimDuration}s (effective: ${effectiveDuration}s + 0.5s buffer)`);
+      console.log(`[AudioMixer] Mixed ${inputs.length} sources with volume compensation (x${volumeCompensation}), trimming to ${trimDuration}s (effective: ${effectiveDuration}s + 0.5s buffer)`);
     }
 
     const filterChain = filters.join(';');

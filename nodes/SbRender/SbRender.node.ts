@@ -492,8 +492,10 @@ export class SbRender implements INodeType {
             resource: ['Video'],
             operation: ['Render'],
             enableSubtitles: [true],
-            subtitleSource: ['srt_string'],
-            srtLargeText: [false],
+            subtitleSource: ['srt_string', 'srt_url', 'srt_binary'],
+          },
+          hide: {
+            srtLargeText: [true],
           },
         },
         default: '#000000',
@@ -510,8 +512,10 @@ export class SbRender implements INodeType {
             resource: ['Video'],
             operation: ['Render'],
             enableSubtitles: [true],
-            subtitleSource: ['srt_string'],
-            srtLargeText: [false],
+            subtitleSource: ['srt_string', 'srt_url', 'srt_binary'],
+          },
+          hide: {
+            srtLargeText: [true],
           },
         },
         default: 70,
@@ -1838,7 +1842,14 @@ export class SbRender implements INodeType {
                 if (srtFileUrl) {
                   const srtFilePath = await fileManager.downloadFile(srtFileUrl);
                   const srtContent = await fileManager.readFileAsText(srtFilePath);
-                  subtitleArray = subtitleEngine.parseSRT(srtContent);
+                  // Get background settings for SRT URL source
+                  const backgroundColor = this.getNodeParameter('srtBackgroundColor', itemIndex, '#000000') as string;
+                  const backgroundOpacity = this.getNodeParameter('srtBackgroundOpacity', itemIndex, 70) as number;
+                  const urlDefaultConfig: Partial<ISubtitleConfig> = {
+                    backgroundColor,
+                    backgroundOpacity,
+                  };
+                  subtitleArray = subtitleEngine.parseSRT(srtContent, urlDefaultConfig);
                 }
               } else if (subtitleSource === 'srt_binary') {
                 // Extract SRT file from binary data
@@ -1847,7 +1858,14 @@ export class SbRender implements INodeType {
                   this.helpers.assertBinaryData(itemIndex, srtBinaryProperty);
                   const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, srtBinaryProperty);
                   const srtContent = buffer.toString('utf-8');
-                  subtitleArray = subtitleEngine.parseSRT(srtContent);
+                  // Get background settings for SRT binary source
+                  const backgroundColor = this.getNodeParameter('srtBackgroundColor', itemIndex, '#000000') as string;
+                  const backgroundOpacity = this.getNodeParameter('srtBackgroundOpacity', itemIndex, 70) as number;
+                  const binaryDefaultConfig: Partial<ISubtitleConfig> = {
+                    backgroundColor,
+                    backgroundOpacity,
+                  };
+                  subtitleArray = subtitleEngine.parseSRT(srtContent, binaryDefaultConfig);
                 } catch (error) {
                   const item = this.getInputData()[itemIndex];
                   const availableProperties = item.binary ? Object.keys(item.binary) : [];

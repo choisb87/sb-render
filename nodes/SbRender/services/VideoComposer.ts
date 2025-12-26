@@ -300,6 +300,7 @@ export class VideoComposer implements IVideoComposer {
             narrationPath: narrationPath || undefined,
             narrationVolume: config.narrationVolume || 100,
             narrationDelay: config.narrationDelay || 0,
+            narrationDuration: narrationDuration, // Pass narration duration for proper trim calculation
           };
 
           console.log(`[ComposeAudioMix] Audio config:`, JSON.stringify(audioConfig, null, 2));
@@ -599,8 +600,17 @@ export class VideoComposer implements IVideoComposer {
           return;
         }
 
+        // Use the maximum of format duration, video stream duration, and audio stream duration
+        // This prevents audio from being cut off when audio is slightly longer than video
+        const formatDuration = metadata.format.duration || 0;
+        const videoDuration = videoStream.duration ? parseFloat(String(videoStream.duration)) : 0;
+        const audioDuration = audioStream?.duration ? parseFloat(String(audioStream.duration)) : 0;
+        const maxDuration = Math.max(formatDuration, videoDuration, audioDuration) || 10;
+
+        console.log(`[Metadata] Durations - format: ${formatDuration}s, video: ${videoDuration}s, audio: ${audioDuration}s, using: ${maxDuration}s`);
+
         const result = {
-          duration: metadata.format.duration || 10,
+          duration: maxDuration,
           width: videoStream.width || 1920,
           height: videoStream.height || 1080,
           hasAudio: hasValidAudio,

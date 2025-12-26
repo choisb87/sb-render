@@ -112,6 +112,7 @@ export interface IAudioMixConfig {
   narrationPath?: string;
   narrationVolume: number;
   narrationDelay: number;
+  narrationDuration?: number; // Duration of narration audio in seconds
 }
 
 export interface IFFmpegCommand {

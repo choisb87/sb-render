@@ -108,9 +108,17 @@ export class AudioMixer implements IAudioMixer {
       return ''; // No audio to mix
     }
 
+    // Calculate trim duration based on the longest audio source
+    // This prevents narration from being cut off when it's longer than video
+    const narrationDuration = config.narrationDuration || 0;
+    const narrationEndTime = narrationDuration + (config.narrationDelay || 0);
+    const effectiveDuration = Math.max(videoDuration, narrationEndTime);
+
     // Add a small buffer (0.5s) to prevent audio from being cut off prematurely
     // This accounts for minor duration detection inaccuracies
-    const trimDuration = videoDuration + 0.5;
+    const trimDuration = effectiveDuration + 0.5;
+
+    console.log(`[AudioMixer] Trim duration calculation - Video: ${videoDuration}s, Narration: ${narrationDuration}s (delay: ${config.narrationDelay || 0}s), Effective: ${effectiveDuration}s, Trim: ${trimDuration}s`);
 
     if (inputs.length === 1) {
       // Only one audio source, trim to video duration with buffer
@@ -120,13 +128,14 @@ export class AudioMixer implements IAudioMixer {
     } else {
       // Mix multiple audio sources
       // Use 'longest' to ensure all audio is captured, then trim with buffer
+      // normalize=0 prevents amix from reducing volume (default behavior reduces by 1/n)
       const mixInputs = inputs.join('');
 
-      // Mix audio sources, then trim to video duration + buffer to prevent audio cut-off
+      // Mix audio sources, then trim to effective duration + buffer to prevent audio cut-off
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest,atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:normalize=0,atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
       );
-      console.log(`[AudioMixer] Mixed ${inputs.length} sources, trimming to ${trimDuration}s (video: ${videoDuration}s + 0.5s buffer)`);
+      console.log(`[AudioMixer] Mixed ${inputs.length} sources with normalize=0, trimming to ${trimDuration}s (effective: ${effectiveDuration}s + 0.5s buffer)`);
     }
 
     const filterChain = filters.join(';');

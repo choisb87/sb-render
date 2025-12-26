@@ -111,13 +111,16 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
       const styleName = `Style${index}`;
       const primaryColor = this.hexToASSColor(subtitle.fontColor);
       const outlineColor = this.hexToASSColor(subtitle.borderColor || '#000000');
-      const backColor = this.hexToASSColor(subtitle.backgroundColor || '#000000', subtitle.backgroundOpacity);
+      // BackColour is used for the shadow/box background with opacity
+      const backColor = this.hexToASSColor(subtitle.backgroundColor || '#000000', subtitle.backgroundOpacity ?? 80);
 
       const alignment = this.getASSAlignment(subtitle.alignment, subtitle.position);
       const outline = subtitle.borderWidth || 2;
 
-      // BorderStyle: 3 = Opaque box (background color applied as box behind text)
-      const styleDefinition = `Style: ${styleName},${fontName},${subtitle.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,3,${outline},2,${alignment},10,10,10,1`;
+      // BorderStyle: 4 = Shadow acts as opaque box behind text (supports alpha in BackColour)
+      // Shadow value controls the box padding around text
+      const shadowSize = Math.max(10, Math.round(subtitle.fontSize * 0.15)); // 15% of font size, min 10px
+      const styleDefinition = `Style: ${styleName},${fontName},${subtitle.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,4,${outline},${shadowSize},${alignment},10,10,10,1`;
 
       uniqueStyles.set(styleName, styleDefinition);
     });

@@ -63,8 +63,8 @@ export function getFileExtension(path: string): string {
  */
 export async function validateFFmpegAvailable(): Promise<boolean> {
   try {
-    const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg');
-    return !!ffmpegInstaller.path;
+    const ffmpegPath = await import('ffmpeg-static');
+    return !!ffmpegPath.default;
   } catch {
     return false;
   }

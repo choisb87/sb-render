@@ -1,8 +1,8 @@
 import { promises as fs, appendFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import ffmpeg from 'fluent-ffmpeg';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
+import ffmpegPath from 'ffmpeg-static';
+import ffprobeStatic from 'ffprobe-static';
 import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../interfaces';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
@@ -19,32 +19,33 @@ function debugLog(message: string): void {
 
 // Set FFmpeg and FFprobe paths with validation
 try {
-  const ffmpegPath = ffmpegInstaller.path;
-  const ffprobePath = ffprobeInstaller.path;
+  // ffmpeg-static exports path directly, ffprobe-static exports { path }
+  const ffmpegBinPath = ffmpegPath as string;
+  const ffprobeBinPath = ffprobeStatic.path;
 
   // Validate that binaries actually exist (critical for n8n environment)
-  if (!existsSync(ffmpegPath)) {
-    console.error(`[VideoComposer] FFmpeg binary not found at: ${ffmpegPath}`);
-    debugLog(`[VideoComposer] FFmpeg binary missing: ${ffmpegPath}`);
-    
+  if (!ffmpegBinPath || !existsSync(ffmpegBinPath)) {
+    console.error(`[VideoComposer] FFmpeg binary not found at: ${ffmpegBinPath}`);
+    debugLog(`[VideoComposer] FFmpeg binary missing: ${ffmpegBinPath}`);
+
     // Try system ffmpeg as fallback
     try {
       ffmpeg.setFfmpegPath('ffmpeg');
       console.warn('[VideoComposer] Using system ffmpeg as fallback');
       debugLog('[VideoComposer] Using system ffmpeg as fallback');
     } catch (systemError) {
-      throw new Error(`FFmpeg binary not found at ${ffmpegPath} and system ffmpeg unavailable`);
+      throw new Error(`FFmpeg binary not found at ${ffmpegBinPath} and system ffmpeg unavailable`);
     }
   } else {
-    ffmpeg.setFfmpegPath(ffmpegPath);
-    console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegPath}`);
-    debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegPath}`);
+    ffmpeg.setFfmpegPath(ffmpegBinPath);
+    console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegBinPath}`);
+    debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegBinPath}`);
   }
 
-  if (!existsSync(ffprobePath)) {
-    console.error(`[VideoComposer] FFprobe binary not found at: ${ffprobePath}`);
-    debugLog(`[VideoComposer] FFprobe binary missing: ${ffprobePath}`);
-    
+  if (!ffprobeBinPath || !existsSync(ffprobeBinPath)) {
+    console.error(`[VideoComposer] FFprobe binary not found at: ${ffprobeBinPath}`);
+    debugLog(`[VideoComposer] FFprobe binary missing: ${ffprobeBinPath}`);
+
     // Try system ffprobe as fallback
     try {
       ffmpeg.setFfprobePath('ffprobe');
@@ -56,9 +57,9 @@ try {
       // Don't throw - we'll handle this gracefully in getVideoMetadata
     }
   } else {
-    ffmpeg.setFfprobePath(ffprobePath);
-    console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobePath}`);
-    debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobePath}`);
+    ffmpeg.setFfprobePath(ffprobeBinPath);
+    console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobeBinPath}`);
+    debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobeBinPath}`);
   }
 } catch (error) {
   console.error('[VideoComposer] CRITICAL: Failed to initialize FFmpeg/FFprobe:', error);
@@ -554,8 +555,8 @@ export class VideoComposer implements IVideoComposer {
       // Try to use ffprobe
       // Ensure path is set in case n8n environment is different
       try {
-        ffmpeg.setFfprobePath(ffprobeInstaller.path);
-        debugLog(`[Metadata] FFprobe path reconfirmed: ${ffprobeInstaller.path}`);
+        ffmpeg.setFfprobePath(ffprobeStatic.path);
+        debugLog(`[Metadata] FFprobe path reconfirmed: ${ffprobeStatic.path}`);
       } catch (e) {
         console.warn('[Metadata] Could not set ffprobe path:', e);
         debugLog(`[Metadata] FFprobe path setting failed: ${e}`);

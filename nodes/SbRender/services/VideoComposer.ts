@@ -386,6 +386,16 @@ export class VideoComposer implements IVideoComposer {
           // We must resample to a standard frame rate (e.g., 24fps) to ensure
           // there are enough frames for subtitles to be rendered correctly.
           videoFilters.push('fps=24');
+          currentVideoDuration = narrationDuration; // Update after stretching
+        }
+
+        // If narration is STILL longer than video (syncToAudio disabled or insufficient),
+        // extend video by freezing the last frame to prevent narration cut-off
+        if (narrationDuration > currentVideoDuration) {
+          const extensionDuration = narrationDuration - currentVideoDuration + 1; // +1s buffer
+          console.log(`[ComposeAudioMix] Extending video by ${extensionDuration.toFixed(2)}s to match narration (tpad)`);
+          // tpad freezes the last frame for the specified duration
+          videoFilters.push(`tpad=stop_mode=clone:stop_duration=${extensionDuration.toFixed(3)}`);
         }
 
         // Add subtitle overlay if present

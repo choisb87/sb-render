@@ -257,6 +257,11 @@ export class VideoComposer implements IVideoComposer {
       } catch (error) {
         console.warn('Failed to get narration duration:', error);
       }
+    } else if (videoMetadata.hasAudio && videoMetadata.audioDuration) {
+      // No separate narration path, but original video has audio
+      // Use audio duration from original video to prevent narration cut-off
+      narrationDuration = videoMetadata.audioDuration;
+      console.log(`[ComposeAudioMix] Using original video audio duration as narration: ${narrationDuration}s`);
     }
 
     // Calculate effective duration (max of video and narration) to ensure BGM covers the whole duration
@@ -369,7 +374,11 @@ export class VideoComposer implements IVideoComposer {
         const videoFilters: string[] = [];
 
         // Half frame rate if enabled (doubles duration)
-        let currentVideoDuration = videoDuration;
+        // Use actual video stream duration (frame length), not max duration
+        // This ensures tpad is applied when audio is longer than video frames
+        const actualVideoDuration = videoMetadata.videoDuration || videoDuration;
+        let currentVideoDuration = actualVideoDuration;
+        console.log(`[ComposeAudioMix] Video frame duration: ${actualVideoDuration}s, narration: ${narrationDuration}s`);
         if (config.halfFrameRate) {
           // Slow down video by doubling PTS and maintaining consistent frame timing
           videoFilters.push('setpts=2.0*PTS');
@@ -626,6 +635,8 @@ export class VideoComposer implements IVideoComposer {
           hasAudio: hasValidAudio,
           videoCodec: videoStream.codec_name || 'unknown',
           audioCodec: audioStream?.codec_name,
+          videoDuration: videoDuration > 0 ? videoDuration : undefined,
+          audioDuration: audioDuration > 0 ? audioDuration : undefined,
         };
 
         console.log(`[Metadata] ✅ Result:`, result);

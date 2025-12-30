@@ -41,8 +41,12 @@ export class AudioMixer implements IAudioMixer {
 
     // Handle original video audio
     if (hasOriginalAudio) {
-      filters.push('[0:a]volume=1.0[original]');
+      // Use apad to ensure original audio is not truncated at video frame length
+      // This preserves audio that extends beyond video frames
+      const padDuration = Math.max(videoDuration, config.narrationDuration || 0) + 1;
+      filters.push(`[0:a]volume=1.0,apad=whole_dur=${padDuration.toFixed(3)}[original]`);
       inputs.push('[original]');
+      console.log(`[AudioMixer] Original audio padded to ${padDuration}s to prevent truncation`);
     }
 
     //Handle BGM
@@ -128,15 +132,16 @@ export class AudioMixer implements IAudioMixer {
     } else {
       // Mix multiple audio sources
       // Use 'longest' to ensure all audio is captured, then trim with buffer
-      // amix default normalize=true reduces volume by 1/n, so we compensate with volume filter
+      // dropout_transition=0 prevents fade when one input ends
+      // volume compensation needed because amix normalizes by default (divides by input count)
       const mixInputs = inputs.join('');
-      const volumeCompensation = inputs.length; // Multiply volume by number of inputs to compensate
+      const volumeCompensation = inputs.length;
 
-      // Mix audio sources, compensate volume, then trim to effective duration + buffer
+      // Mix audio sources with dropout_transition=0 to prevent fade when narration ends
       filters.push(
-        `${mixInputs}amix=inputs=${inputs.length}:duration=longest,volume=${volumeCompensation},atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
+        `${mixInputs}amix=inputs=${inputs.length}:duration=longest:dropout_transition=0,volume=${volumeCompensation},atrim=0:${trimDuration.toFixed(3)},asetpts=PTS-STARTPTS[mixed]`,
       );
-      console.log(`[AudioMixer] Mixed ${inputs.length} sources with volume compensation (x${volumeCompensation}), trimming to ${trimDuration}s (effective: ${effectiveDuration}s + 0.5s buffer)`);
+      console.log(`[AudioMixer] Mixed ${inputs.length} sources with dropout_transition=0, volume x${volumeCompensation}, trimming to ${trimDuration}s`);
     }
 
     const filterChain = filters.join(';');

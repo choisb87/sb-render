@@ -198,12 +198,14 @@ export interface IVideoComposer {
 }
 
 export interface IVideoMetadata {
-  duration: number;
+  duration: number; // Max of video/audio/format duration
   width: number;
   height: number;
   hasAudio: boolean;
   videoCodec: string;
   audioCodec?: string;
+  videoDuration?: number; // Duration of video stream only (frame length)
+  audioDuration?: number; // Duration of audio stream (may differ from video duration)
   fps?: number; // Frames per second
 }
 

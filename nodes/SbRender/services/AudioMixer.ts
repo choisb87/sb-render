@@ -42,11 +42,10 @@ export class AudioMixer implements IAudioMixer {
     // Handle original video audio
     if (hasOriginalAudio) {
       // Use apad to ensure original audio is not truncated at video frame length
-      // This preserves audio that extends beyond video frames
-      const padDuration = Math.max(videoDuration, config.narrationDuration || 0) + 1;
-      filters.push(`[0:a]volume=1.0,apad=whole_dur=${padDuration.toFixed(3)}[original]`);
+      // apad without parameters pads indefinitely; atrim at the end will cut to desired length
+      filters.push('[0:a]volume=1.0,apad[original]');
       inputs.push('[original]');
-      console.log(`[AudioMixer] Original audio padded to ${padDuration}s to prevent truncation`);
+      console.log('[AudioMixer] Original audio with apad to prevent truncation');
     }
 
     //Handle BGM

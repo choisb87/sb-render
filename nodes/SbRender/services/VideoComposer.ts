@@ -17,16 +17,52 @@ function debugLog(message: string): void {
   }
 }
 
+// Helper function to find binary in multiple locations
+function findBinary(primaryPath: string | null, binaryName: string): string | null {
+  // Check primary path from package
+  if (primaryPath && existsSync(primaryPath)) {
+    return primaryPath;
+  }
+
+  // Search in common n8n locations (hoisted node_modules)
+  const searchPaths = [
+    // n8n custom nodes location
+    '/home/node/.n8n/node_modules/ffmpeg-static/ffmpeg',
+    '/home/node/.n8n/node_modules/ffprobe-static/bin/linux/x64/ffprobe',
+    // n8n nodes location
+    '/home/node/.n8n/nodes/node_modules/ffmpeg-static/ffmpeg',
+    '/home/node/.n8n/nodes/node_modules/ffprobe-static/bin/linux/x64/ffprobe',
+    // Relative to this module
+    join(__dirname, '..', '..', '..', 'node_modules', 'ffmpeg-static', 'ffmpeg'),
+    join(__dirname, '..', '..', '..', 'node_modules', 'ffprobe-static', 'bin', 'linux', 'x64', 'ffprobe'),
+    // Go up more levels for hoisted packages
+    join(__dirname, '..', '..', '..', '..', 'node_modules', 'ffmpeg-static', 'ffmpeg'),
+    join(__dirname, '..', '..', '..', '..', 'node_modules', 'ffprobe-static', 'bin', 'linux', 'x64', 'ffprobe'),
+    join(__dirname, '..', '..', '..', '..', '..', 'node_modules', 'ffmpeg-static', 'ffmpeg'),
+    join(__dirname, '..', '..', '..', '..', '..', 'node_modules', 'ffprobe-static', 'bin', 'linux', 'x64', 'ffprobe'),
+  ];
+
+  for (const searchPath of searchPaths) {
+    if (searchPath.includes(binaryName) && existsSync(searchPath)) {
+      console.log(`[VideoComposer] Found ${binaryName} at: ${searchPath}`);
+      debugLog(`[VideoComposer] Found ${binaryName} at: ${searchPath}`);
+      return searchPath;
+    }
+  }
+
+  return null;
+}
+
 // Set FFmpeg and FFprobe paths with validation
 try {
   // ffmpeg-static exports path directly, ffprobe-static exports { path }
-  const ffmpegBinPath = ffmpegPath as string;
-  const ffprobeBinPath = ffprobeStatic.path;
+  const ffmpegBinPath = findBinary(ffmpegPath as string, 'ffmpeg');
+  const ffprobeBinPath = findBinary(ffprobeStatic.path, 'ffprobe');
 
   // Validate that binaries actually exist (critical for n8n environment)
-  if (!ffmpegBinPath || !existsSync(ffmpegBinPath)) {
-    console.error(`[VideoComposer] FFmpeg binary not found at: ${ffmpegBinPath}`);
-    debugLog(`[VideoComposer] FFmpeg binary missing: ${ffmpegBinPath}`);
+  if (!ffmpegBinPath) {
+    console.error(`[VideoComposer] FFmpeg binary not found in any location`);
+    debugLog(`[VideoComposer] FFmpeg binary missing from all locations`);
 
     // Try system ffmpeg as fallback
     try {
@@ -34,7 +70,7 @@ try {
       console.warn('[VideoComposer] Using system ffmpeg as fallback');
       debugLog('[VideoComposer] Using system ffmpeg as fallback');
     } catch (systemError) {
-      throw new Error(`FFmpeg binary not found at ${ffmpegBinPath} and system ffmpeg unavailable`);
+      throw new Error(`FFmpeg binary not found and system ffmpeg unavailable`);
     }
   } else {
     ffmpeg.setFfmpegPath(ffmpegBinPath);
@@ -42,9 +78,9 @@ try {
     debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegBinPath}`);
   }
 
-  if (!ffprobeBinPath || !existsSync(ffprobeBinPath)) {
-    console.error(`[VideoComposer] FFprobe binary not found at: ${ffprobeBinPath}`);
-    debugLog(`[VideoComposer] FFprobe binary missing: ${ffprobeBinPath}`);
+  if (!ffprobeBinPath) {
+    console.error(`[VideoComposer] FFprobe binary not found in any location`);
+    debugLog(`[VideoComposer] FFprobe binary missing from all locations`);
 
     // Try system ffprobe as fallback
     try {
@@ -64,7 +100,7 @@ try {
 } catch (error) {
   console.error('[VideoComposer] CRITICAL: Failed to initialize FFmpeg/FFprobe:', error);
   debugLog(`[VideoComposer] Initialization error: ${error}`);
-  
+
   // Final fallback: try system binaries
   try {
     ffmpeg.setFfmpegPath('ffmpeg');

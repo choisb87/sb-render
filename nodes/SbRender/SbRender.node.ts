@@ -932,6 +932,32 @@ export class SbRender implements INodeType {
                 default: 3,
                 description: 'Duration in seconds (only for images)',
               },
+              {
+                displayName: 'Ken Burns Effect',
+                name: 'kenBurnsEffect',
+                type: 'options',
+                displayOptions: {
+                  show: {
+                    type: ['image'],
+                  },
+                },
+                options: [
+                  {
+                    name: 'None',
+                    value: 'none',
+                  },
+                  {
+                    name: 'Zoom In',
+                    value: 'zoomIn',
+                  },
+                  {
+                    name: 'Zoom Out',
+                    value: 'zoomOut',
+                  },
+                ],
+                default: 'none',
+                description: 'Apply Ken Burns zoom effect to make the image look more cinematic',
+              },
             ],
           },
         ],
@@ -1121,6 +1147,27 @@ export class SbRender implements INodeType {
                   numberPrecision: 1,
                 },
                 description: 'How long to display this image in seconds',
+              },
+              {
+                displayName: 'Ken Burns Effect',
+                name: 'kenBurnsEffect',
+                type: 'options',
+                options: [
+                  {
+                    name: 'None',
+                    value: 'none',
+                  },
+                  {
+                    name: 'Zoom In',
+                    value: 'zoomIn',
+                  },
+                  {
+                    name: 'Zoom Out',
+                    value: 'zoomOut',
+                  },
+                ],
+                default: 'none',
+                description: 'Apply Ken Burns zoom effect to make the image look more cinematic',
               },
             ],
           },
@@ -1940,7 +1987,7 @@ export class SbRender implements INodeType {
             returnData.push(result);
           } else if (operation === 'Merge') {
             // Get merge parameters (support both old videoUrls and new mediaItems format)
-            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number }> };
+            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: 'none' | 'zoomIn' | 'zoomOut' }> };
             let mediaItems = mediaItemsParam.items || [];
 
             // Backward compatibility: check for old videoUrls parameter
@@ -2000,9 +2047,10 @@ export class SbRender implements INodeType {
               } else if (item.type === 'image') {
                 // Download image and convert to video
                 const imagePath = await fileManager.downloadFile(item.url);
-                console.log(`[SB Render] Downloaded image to: ${imagePath}, duration: ${item.duration || 3}s`);
+                const kenBurnsEffect = item.kenBurnsEffect || 'none';
+                console.log(`[SB Render] Downloaded image to: ${imagePath}, duration: ${item.duration || 3}s, kenBurns: ${kenBurnsEffect}`);
 
-                // Create temporary video from image
+                // Create temporary video from image with Ken Burns effect
                 const tempVideoPath = await fileManager.createTempFile('.mp4');
                 await videoComposer.createVideoFromImages(
                   [imagePath],
@@ -2012,6 +2060,7 @@ export class SbRender implements INodeType {
                   mergeQuality,
                   mergeCustomCRF,
                   'mp4',
+                  [kenBurnsEffect],
                 );
 
                 videoPaths.push(tempVideoPath);
@@ -2131,7 +2180,7 @@ export class SbRender implements INodeType {
             console.log(`[SB Render] ReturnData length: ${returnData.length}`);
           } else if (operation === 'ImageToVideo') {
             // Get ImageToVideo parameters
-            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number }> };
+            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: 'none' | 'zoomIn' | 'zoomOut' }> };
             const imageValues = imagesParam.imageValues || [];
             const outputFilename = this.getNodeParameter('imageToVideoOutputFilename', itemIndex, 'images-video.mp4') as string;
             const imageToVideoOutputFormat = this.getNodeParameter('imageToVideoOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
@@ -2146,17 +2195,20 @@ export class SbRender implements INodeType {
               throw new NodeOperationError(this.getNode(), 'No images provided for ImageToVideo operation', { itemIndex });
             }
 
-            // Download all images
+            // Download all images and collect Ken Burns effects
             console.log('[SB Render] Downloading images...');
             const imagePaths: string[] = [];
             const durations: number[] = [];
+            const kenBurnsEffects: ('none' | 'zoomIn' | 'zoomOut')[] = [];
 
             for (let i = 0; i < imageValues.length; i++) {
               const imageValue = imageValues[i];
-              console.log(`[SB Render] Downloading image ${i + 1}/${imageValues.length}: ${imageValue.url}`);
+              const kenBurnsEffect = imageValue.kenBurnsEffect || 'none';
+              console.log(`[SB Render] Downloading image ${i + 1}/${imageValues.length}: ${imageValue.url}, kenBurns: ${kenBurnsEffect}`);
               const imagePath = await fileManager.downloadFile(imageValue.url);
               imagePaths.push(imagePath);
               durations.push(imageValue.duration);
+              kenBurnsEffects.push(kenBurnsEffect);
               console.log(`[SB Render] Downloaded to: ${imagePath}, duration: ${imageValue.duration}s`);
             }
 
@@ -2164,8 +2216,8 @@ export class SbRender implements INodeType {
             const outputPath = await fileManager.createTempFile(`.${imageToVideoOutputFormat}`);
             console.log(`[SB Render] Output path: ${outputPath}`);
 
-            // Create video from images
-            console.log('[SB Render] Creating video from images...');
+            // Create video from images with Ken Burns effects
+            console.log(`[SB Render] Creating video from images with Ken Burns effects: ${kenBurnsEffects.join(', ')}`);
             const videoBuffer = await videoComposer.createVideoFromImages(
               imagePaths,
               durations,
@@ -2174,6 +2226,7 @@ export class SbRender implements INodeType {
               imageToVideoQuality,
               imageToVideoCustomCRF,
               imageToVideoOutputFormat,
+              kenBurnsEffects,
             );
             console.log(`[SB Render] Video creation completed, buffer size: ${videoBuffer.length} bytes`);
 

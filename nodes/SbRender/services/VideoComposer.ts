@@ -836,6 +836,7 @@ export class VideoComposer implements IVideoComposer {
 
   /**
    * Create video from multiple images with specified durations
+   * @param kenBurnsEffects - Optional array of Ken Burns effects for each image ('none' | 'zoomIn' | 'zoomOut')
    */
   async createVideoFromImages(
     imagePaths: string[],
@@ -845,14 +846,22 @@ export class VideoComposer implements IVideoComposer {
     quality = 'high',
     customCRF?: number,
     outputFormat = 'mp4',
+    kenBurnsEffects?: ('none' | 'zoomIn' | 'zoomOut')[],
   ): Promise<Buffer> {
     if (imagePaths.length !== durations.length) {
       throw new Error('Number of images must match number of durations');
     }
 
+    // Default to 'none' for all images if not provided
+    const effects = kenBurnsEffects || imagePaths.map(() => 'none');
+    if (effects.length !== imagePaths.length) {
+      throw new Error('Number of Ken Burns effects must match number of images');
+    }
+
     return new Promise((resolve, reject) => {
       try {
         const command = ffmpeg();
+        const FPS = 24;
 
         // Add all images as inputs with loop and duration
         imagePaths.forEach((imagePath, index) => {
@@ -864,16 +873,48 @@ export class VideoComposer implements IVideoComposer {
             ]);
         });
 
-        // Build filter to scale all images to 1920x1080 and concat
-        // Each image is scaled to fit within 1920x1080 with padding (black bars) if needed
-        const scaleFilters = imagePaths.map((_, index) =>
-          `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24[v${index}]`
-        ).join(';');
+        // Build filter for each image based on Ken Burns effect
+        const filters: string[] = [];
 
+        imagePaths.forEach((_, index) => {
+          const duration = durations[index];
+          const effect = effects[index];
+          const frames = Math.ceil(duration * FPS);
+
+          if (effect === 'zoomIn') {
+            // Ken Burns Zoom In: 1.0 → 1.2 scale, centered
+            // zoompan outputs at target size, so we need to start larger and use zoom
+            filters.push(
+              `[${index}:v]scale=8000:-1,` +
+              `zoompan=z='1+0.2*on/${frames}':` +
+              `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+              `d=${frames}:s=1920x1080:fps=${FPS},` +
+              `setsar=1[v${index}]`
+            );
+          } else if (effect === 'zoomOut') {
+            // Ken Burns Zoom Out: 1.2 → 1.0 scale, centered
+            filters.push(
+              `[${index}:v]scale=8000:-1,` +
+              `zoompan=z='1.2-0.2*on/${frames}':` +
+              `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+              `d=${frames}:s=1920x1080:fps=${FPS},` +
+              `setsar=1[v${index}]`
+            );
+          } else {
+            // No effect - standard scale with padding
+            filters.push(
+              `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,` +
+              `pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${FPS}[v${index}]`
+            );
+          }
+        });
+
+        const scaleFilters = filters.join(';');
         const concatInputs = imagePaths.map((_, index) => `[v${index}]`).join('');
         const filterString = `${scaleFilters};${concatInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
 
-        console.log(`FFmpeg image to video filter: scale and concat`);
+        console.log(`[ImageToVideo] Ken Burns effects: ${effects.join(', ')}`);
+        debugLog(`[ImageToVideo] Filter: ${filterString}`);
 
         // Apply complex filter
         command.complexFilter(filterString);

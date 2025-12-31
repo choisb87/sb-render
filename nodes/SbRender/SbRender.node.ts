@@ -1132,132 +1132,117 @@ export class SbRender implements INodeType {
             name: 'imageValues',
             displayName: 'Image',
             values: [
-              {
-                displayName: 'Image URL',
-                name: 'url',
-                type: 'string',
-                default: '',
-                placeholder: 'https://example.com/image.jpg',
-                description: 'URL of the image',
-              },
-              {
-                displayName: 'Duration (Seconds)',
-                name: 'duration',
-                type: 'number',
-                default: 3,
-                typeOptions: {
-                  minValue: 0.1,
-                  maxValue: 60,
-                  numberPrecision: 1,
-                },
-                description: 'How long to display this image in seconds',
-              },
-              {
-                displayName: 'Motion Type',
-                name: 'kenBurnsEffect',
-                type: 'options',
-                options: [
-                  {
-                    name: 'None',
-                    value: 'none',
-                  },
-                  {
-                    name: 'Zoom In',
-                    value: 'zoomIn',
-                    description: 'Zoom into the center',
-                  },
-                  {
-                    name: 'Zoom Out',
-                    value: 'zoomOut',
-                    description: 'Zoom out from center',
-                  },
-                  {
-                    name: 'Pan Left',
-                    value: 'panLeft',
-                    description: 'Pan from right to left',
-                  },
-                  {
-                    name: 'Pan Right',
-                    value: 'panRight',
-                    description: 'Pan from left to right',
-                  },
-                  {
-                    name: 'Pan Up',
-                    value: 'panUp',
-                    description: 'Pan from bottom to top',
-                  },
-                  {
-                    name: 'Pan Down',
-                    value: 'panDown',
-                    description: 'Pan from top to bottom',
-                  },
-                ],
-                default: 'none',
-                description: 'Ken Burns motion effect',
-              },
-              {
-                displayName: 'Zoom Direction',
-                name: 'zoomDirection',
-                type: 'options',
-                displayOptions: {
-                  show: {
-                    kenBurnsEffect: ['zoomIn', 'zoomOut'],
-                  },
-                },
-                options: [
-                  {
-                    name: 'Center',
-                    value: 'center',
-                  },
-                  {
-                    name: 'Left',
-                    value: 'left',
-                  },
-                  {
-                    name: 'Right',
-                    value: 'right',
-                  },
-                  {
-                    name: 'Top',
-                    value: 'top',
-                  },
-                  {
-                    name: 'Bottom',
-                    value: 'bottom',
-                  },
-                ],
-                default: 'center',
-                description: 'Direction to zoom towards',
-              },
-              {
-                displayName: 'Motion Speed',
-                name: 'motionSpeed',
-                type: 'options',
-                displayOptions: {
-                  show: {
-                    kenBurnsEffect: ['zoomIn', 'zoomOut', 'panLeft', 'panRight', 'panUp', 'panDown'],
-                  },
-                },
-                options: [
-                  {
-                    name: 'Slow',
-                    value: 'slow',
-                    description: 'Subtle, gentle motion',
-                  },
-                  {
-                    name: 'Normal',
-                    value: 'normal',
-                  },
-                  {
-                    name: 'Fast',
-                    value: 'fast',
-                    description: 'Dramatic, quick motion',
-                  },
-                ],
-                default: 'normal',
-                description: 'Speed of the motion effect',
-              },
-            ],
+											{
+												displayName: 'Duration (Seconds)',
+												name: 'duration',
+												type: 'number',
+												default: 3,
+												description: 'How long to display this image in seconds',
+											},
+											{
+												displayName: 'Image URL',
+												name: 'url',
+												type: 'string',
+												default: '',
+												placeholder: 'https://example.com/image.jpg',
+												description: 'URL of the image',
+											},
+											{
+												displayName: 'Motion Speed',
+												name: 'motionSpeed',
+												type: 'options',
+												options: [
+													{
+														name: 'Slow',
+														value: 'slow',
+														description: 'Subtle, gentle motion',
+													},
+													{
+														name: 'Normal',
+														value: 'normal',
+													},
+													{
+														name: 'Fast',
+														value: 'fast',
+														description: 'Dramatic, quick motion',
+													},
+												],
+												default: 'normal',
+												description: 'Speed of the motion effect',
+											},
+											{
+												displayName: 'Motion Type',
+												name: 'kenBurnsEffect',
+												type: 'options',
+												options: [
+													{
+														name: 'None',
+														value: 'none',
+													},
+													{
+														name: 'Pan Down',
+														value: 'panDown',
+														description: 'Pan from top to bottom',
+													},
+													{
+														name: 'Pan Left',
+														value: 'panLeft',
+														description: 'Pan from right to left',
+													},
+													{
+														name: 'Pan Right',
+														value: 'panRight',
+														description: 'Pan from left to right',
+													},
+													{
+														name: 'Pan Up',
+														value: 'panUp',
+														description: 'Pan from bottom to top',
+													},
+													{
+														name: 'Zoom In',
+														value: 'zoomIn',
+														description: 'Zoom into the center',
+													},
+													{
+														name: 'Zoom Out',
+														value: 'zoomOut',
+														description: 'Zoom out from center',
+													},
+													],
+												default: 'none',
+												description: 'Ken Burns motion effect',
+											},
+											{
+												displayName: 'Zoom Direction',
+												name: 'zoomDirection',
+												type: 'options',
+												options: [
+													{
+														name: 'Bottom',
+														value: 'bottom',
+													},
+													{
+														name: 'Center',
+														value: 'center',
+													},
+													{
+														name: 'Left',
+														value: 'left',
+													},
+													{
+														name: 'Right',
+														value: 'right',
+													},
+													{
+														name: 'Top',
+														value: 'top',
+													},
+													],
+												default: 'center',
+												description: 'Direction to zoom towards',
+											},
+									],
           },
         ],
         description: 'List of images with their display durations',

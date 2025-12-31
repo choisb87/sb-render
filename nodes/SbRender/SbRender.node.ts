@@ -21,7 +21,10 @@ import type {
   IAudioMixConfig,
   ISubtitleConfig,
   IVideoMetadata,
-  KenBurnsEffect,
+  KenBurnsConfig,
+  KenBurnsMotion,
+  ZoomDirection,
+  MotionSpeed,
 } from './interfaces';
 
 import { DEFAULTS as DEFAULT_VALUES } from './interfaces';
@@ -1150,38 +1153,23 @@ export class SbRender implements INodeType {
                 description: 'How long to display this image in seconds',
               },
               {
-                displayName: 'Ken Burns Effect',
+                displayName: 'Motion Type',
                 name: 'kenBurnsEffect',
                 type: 'options',
                 options: [
-                  {
-                    name: 'Drift Bottom-Left',
-                    value: 'driftBottomLeft',
-                    description: 'Diagonal drift towards bottom-left corner',
-                  },
-                  {
-                    name: 'Drift Bottom-Right',
-                    value: 'driftBottomRight',
-                    description: 'Diagonal drift towards bottom-right corner',
-                  },
-                  {
-                    name: 'Drift Top-Left',
-                    value: 'driftTopLeft',
-                    description: 'Diagonal drift towards top-left corner',
-                  },
-                  {
-                    name: 'Drift Top-Right',
-                    value: 'driftTopRight',
-                    description: 'Diagonal drift towards top-right corner',
-                  },
                   {
                     name: 'None',
                     value: 'none',
                   },
                   {
-                    name: 'Pan Down',
-                    value: 'panDown',
-                    description: 'Pan from top to bottom',
+                    name: 'Zoom In',
+                    value: 'zoomIn',
+                    description: 'Zoom into the center',
+                  },
+                  {
+                    name: 'Zoom Out',
+                    value: 'zoomOut',
+                    description: 'Zoom out from center',
                   },
                   {
                     name: 'Pan Left',
@@ -1199,83 +1187,75 @@ export class SbRender implements INodeType {
                     description: 'Pan from bottom to top',
                   },
                   {
-                    name: 'Parallax Down',
-                    value: 'parallaxDown',
-                    description: 'Zoom in while panning down - creates depth illusion',
-                  },
-                  {
-                    name: 'Parallax Left',
-                    value: 'parallaxLeft',
-                    description: 'Zoom in while panning left - creates depth illusion',
-                  },
-                  {
-                    name: 'Parallax Right',
-                    value: 'parallaxRight',
-                    description: 'Zoom in while panning right - creates depth illusion',
-                  },
-                  {
-                    name: 'Parallax Up',
-                    value: 'parallaxUp',
-                    description: 'Zoom in while panning up - creates depth illusion',
-                  },
-                  {
-                    name: 'Parallax Zoom',
-                    value: 'parallaxZoom',
-                    description: 'Deep zoom with organic breathing motion',
-                  },
-                  {
-                    name: 'Zoom In',
-                    value: 'zoomIn',
-                    description: 'Slowly zoom in to center (20% zoom)',
-                  },
-                  {
-                    name: 'Zoom In (Fast)',
-                    value: 'zoomInFast',
-                    description: 'Dramatic zoom in (40% zoom)',
-                  },
-                  {
-                    name: 'Zoom In (Slow)',
-                    value: 'zoomInSlow',
-                    description: 'Subtle zoom in (10% zoom)',
-                  },
-                  {
-                    name: 'Zoom In Bottom',
-                    value: 'zoomInBottom',
-                    description: 'Zoom in towards the bottom',
-                  },
-                  {
-                    name: 'Zoom In Left',
-                    value: 'zoomInLeft',
-                    description: 'Zoom in towards the left side',
-                  },
-                  {
-                    name: 'Zoom In Right',
-                    value: 'zoomInRight',
-                    description: 'Zoom in towards the right side',
-                  },
-                  {
-                    name: 'Zoom In Top',
-                    value: 'zoomInTop',
-                    description: 'Zoom in towards the top',
-                  },
-                  {
-                    name: 'Zoom Out',
-                    value: 'zoomOut',
-                    description: 'Slowly zoom out from center (20% zoom)',
-                  },
-                  {
-                    name: 'Zoom Out (Fast)',
-                    value: 'zoomOutFast',
-                    description: 'Dramatic zoom out (40% zoom)',
-                  },
-                  {
-                    name: 'Zoom Out (Slow)',
-                    value: 'zoomOutSlow',
-                    description: 'Subtle zoom out (10% zoom)',
+                    name: 'Pan Down',
+                    value: 'panDown',
+                    description: 'Pan from top to bottom',
                   },
                 ],
                 default: 'none',
-                description: 'Apply Ken Burns zoom/pan effect to make the image look more cinematic',
+                description: 'Ken Burns motion effect',
+              },
+              {
+                displayName: 'Zoom Direction',
+                name: 'zoomDirection',
+                type: 'options',
+                displayOptions: {
+                  show: {
+                    kenBurnsEffect: ['zoomIn', 'zoomOut'],
+                  },
+                },
+                options: [
+                  {
+                    name: 'Center',
+                    value: 'center',
+                  },
+                  {
+                    name: 'Left',
+                    value: 'left',
+                  },
+                  {
+                    name: 'Right',
+                    value: 'right',
+                  },
+                  {
+                    name: 'Top',
+                    value: 'top',
+                  },
+                  {
+                    name: 'Bottom',
+                    value: 'bottom',
+                  },
+                ],
+                default: 'center',
+                description: 'Direction to zoom towards',
+              },
+              {
+                displayName: 'Motion Speed',
+                name: 'motionSpeed',
+                type: 'options',
+                displayOptions: {
+                  show: {
+                    kenBurnsEffect: ['zoomIn', 'zoomOut', 'panLeft', 'panRight', 'panUp', 'panDown'],
+                  },
+                },
+                options: [
+                  {
+                    name: 'Slow',
+                    value: 'slow',
+                    description: 'Subtle, gentle motion',
+                  },
+                  {
+                    name: 'Normal',
+                    value: 'normal',
+                  },
+                  {
+                    name: 'Fast',
+                    value: 'fast',
+                    description: 'Dramatic, quick motion',
+                  },
+                ],
+                default: 'normal',
+                description: 'Speed of the motion effect',
               },
             ],
           },
@@ -2095,7 +2075,7 @@ export class SbRender implements INodeType {
             returnData.push(result);
           } else if (operation === 'Merge') {
             // Get merge parameters (support both old videoUrls and new mediaItems format)
-            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: KenBurnsEffect }> };
+            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: KenBurnsMotion; zoomDirection?: ZoomDirection; motionSpeed?: MotionSpeed }> };
             let mediaItems = mediaItemsParam.items || [];
 
             // Backward compatibility: check for old videoUrls parameter
@@ -2155,8 +2135,11 @@ export class SbRender implements INodeType {
               } else if (item.type === 'image') {
                 // Download image and convert to video
                 const imagePath = await fileManager.downloadFile(item.url);
-                const kenBurnsEffect = item.kenBurnsEffect || 'none';
-                console.log(`[SB Render] Downloaded image to: ${imagePath}, duration: ${item.duration || 3}s, kenBurns: ${kenBurnsEffect}`);
+                const motion = (item.kenBurnsEffect || 'none') as KenBurnsMotion;
+                const direction = (item.zoomDirection || 'center') as ZoomDirection;
+                const speed = (item.motionSpeed || 'normal') as MotionSpeed;
+                const kenBurnsConfig: KenBurnsConfig = { motion, direction, speed };
+                console.log(`[SB Render] Downloaded image to: ${imagePath}, duration: ${item.duration || 3}s, motion: ${motion}, direction: ${direction}, speed: ${speed}`);
 
                 // Create temporary video from image with Ken Burns effect
                 const tempVideoPath = await fileManager.createTempFile('.mp4');
@@ -2168,7 +2151,7 @@ export class SbRender implements INodeType {
                   mergeQuality,
                   mergeCustomCRF,
                   'mp4',
-                  [kenBurnsEffect],
+                  [kenBurnsConfig],
                 );
 
                 videoPaths.push(tempVideoPath);
@@ -2288,7 +2271,7 @@ export class SbRender implements INodeType {
             console.log(`[SB Render] ReturnData length: ${returnData.length}`);
           } else if (operation === 'ImageToVideo') {
             // Get ImageToVideo parameters
-            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: KenBurnsEffect }> };
+            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: KenBurnsMotion; zoomDirection?: ZoomDirection; motionSpeed?: MotionSpeed }> };
             const imageValues = imagesParam.imageValues || [];
             const outputFilename = this.getNodeParameter('imageToVideoOutputFilename', itemIndex, 'images-video.mp4') as string;
             const imageToVideoOutputFormat = this.getNodeParameter('imageToVideoOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
@@ -2303,20 +2286,24 @@ export class SbRender implements INodeType {
               throw new NodeOperationError(this.getNode(), 'No images provided for ImageToVideo operation', { itemIndex });
             }
 
-            // Download all images and collect Ken Burns effects
+            // Download all images and collect Ken Burns configs
             console.log('[SB Render] Downloading images...');
             const imagePaths: string[] = [];
             const durations: number[] = [];
-            const kenBurnsEffects: KenBurnsEffect[] = [];
+            const kenBurnsConfigs: KenBurnsConfig[] = [];
 
             for (let i = 0; i < imageValues.length; i++) {
               const imageValue = imageValues[i];
-              const kenBurnsEffect = imageValue.kenBurnsEffect || 'none';
-              console.log(`[SB Render] Downloading image ${i + 1}/${imageValues.length}: ${imageValue.url}, kenBurns: ${kenBurnsEffect}`);
+              const motion = (imageValue.kenBurnsEffect || 'none') as KenBurnsMotion;
+              const direction = (imageValue.zoomDirection || 'center') as ZoomDirection;
+              const speed = (imageValue.motionSpeed || 'normal') as MotionSpeed;
+              const config: KenBurnsConfig = { motion, direction, speed };
+
+              console.log(`[SB Render] Downloading image ${i + 1}/${imageValues.length}: ${imageValue.url}, motion: ${motion}, direction: ${direction}, speed: ${speed}`);
               const imagePath = await fileManager.downloadFile(imageValue.url);
               imagePaths.push(imagePath);
               durations.push(imageValue.duration);
-              kenBurnsEffects.push(kenBurnsEffect);
+              kenBurnsConfigs.push(config);
               console.log(`[SB Render] Downloaded to: ${imagePath}, duration: ${imageValue.duration}s`);
             }
 
@@ -2325,7 +2312,7 @@ export class SbRender implements INodeType {
             console.log(`[SB Render] Output path: ${outputPath}`);
 
             // Create video from images with Ken Burns effects
-            console.log(`[SB Render] Creating video from images with Ken Burns effects: ${kenBurnsEffects.join(', ')}`);
+            console.log(`[SB Render] Creating video from images with Ken Burns effects: ${kenBurnsConfigs.map(c => c.motion).join(', ')}`);
             const videoBuffer = await videoComposer.createVideoFromImages(
               imagePaths,
               durations,
@@ -2334,7 +2321,7 @@ export class SbRender implements INodeType {
               imageToVideoQuality,
               imageToVideoCustomCRF,
               imageToVideoOutputFormat,
-              kenBurnsEffects,
+              kenBurnsConfigs,
             );
             console.log(`[SB Render] Video creation completed, buffer size: ${videoBuffer.length} bytes`);
 

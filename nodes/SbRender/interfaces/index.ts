@@ -6,37 +6,19 @@
 // Ken Burns Effect Types
 // ============================================================================
 
-export type KenBurnsEffect =
-  | 'none'
-  // Standard zoom (centered, medium speed)
-  | 'zoomIn'
-  | 'zoomOut'
-  // Speed variations (centered)
-  | 'zoomInSlow'
-  | 'zoomInFast'
-  | 'zoomOutSlow'
-  | 'zoomOutFast'
-  // Position variations (zoom into specific area)
-  | 'zoomInLeft'
-  | 'zoomInRight'
-  | 'zoomInTop'
-  | 'zoomInBottom'
-  // Pan effects (no zoom, just movement)
-  | 'panLeft'
-  | 'panRight'
-  | 'panUp'
-  | 'panDown'
-  // Parallax effects (zoom + pan with depth illusion)
-  | 'parallaxLeft'
-  | 'parallaxRight'
-  | 'parallaxUp'
-  | 'parallaxDown'
-  | 'parallaxZoom'
-  // Diagonal movements
-  | 'driftTopLeft'
-  | 'driftTopRight'
-  | 'driftBottomLeft'
-  | 'driftBottomRight';
+export type KenBurnsMotion = 'none' | 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight' | 'panUp' | 'panDown';
+export type ZoomDirection = 'center' | 'left' | 'right' | 'top' | 'bottom';
+export type MotionSpeed = 'slow' | 'normal' | 'fast';
+
+// Combined effect configuration
+export interface KenBurnsConfig {
+  motion: KenBurnsMotion;
+  direction?: ZoomDirection;
+  speed?: MotionSpeed;
+}
+
+// Legacy type for backward compatibility
+export type KenBurnsEffect = KenBurnsMotion;
 
 // ============================================================================
 // Main Node Parameters

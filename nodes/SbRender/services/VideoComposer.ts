@@ -1,7 +1,7 @@
 import { promises as fs, appendFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { createCommand, ffprobe, getFfmpegPath, getFfprobePath } from '../utils/ffmpeg-wrapper';
-import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams, KenBurnsEffect } from '../interfaces';
+import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams, KenBurnsConfig, ZoomDirection, MotionSpeed } from '../interfaces';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
 const DEBUG_MODE = process.env.SB_RENDER_DEBUG === 'true';
@@ -790,7 +790,7 @@ export class VideoComposer implements IVideoComposer {
 
   /**
    * Create video from multiple images with specified durations
-   * @param kenBurnsEffects - Optional array of Ken Burns effects for each image
+   * @param kenBurnsConfigs - Optional array of Ken Burns configurations for each image
    */
   async createVideoFromImages(
     imagePaths: string[],
@@ -800,16 +800,17 @@ export class VideoComposer implements IVideoComposer {
     quality = 'high',
     customCRF?: number,
     outputFormat = 'mp4',
-    kenBurnsEffects?: KenBurnsEffect[],
+    kenBurnsConfigs?: KenBurnsConfig[],
   ): Promise<Buffer> {
     if (imagePaths.length !== durations.length) {
       throw new Error('Number of images must match number of durations');
     }
 
-    // Default to 'none' for all images if not provided
-    const effects: KenBurnsEffect[] = kenBurnsEffects || imagePaths.map(() => 'none');
-    if (effects.length !== imagePaths.length) {
-      throw new Error('Number of Ken Burns effects must match number of images');
+    // Default config for all images if not provided
+    const defaultConfig: KenBurnsConfig = { motion: 'none', direction: 'center', speed: 'normal' };
+    const configs: KenBurnsConfig[] = kenBurnsConfigs || imagePaths.map(() => defaultConfig);
+    if (configs.length !== imagePaths.length) {
+      throw new Error('Number of Ken Burns configs must match number of images');
     }
 
     return new Promise((resolve, reject) => {
@@ -817,26 +818,22 @@ export class VideoComposer implements IVideoComposer {
         const command = createCommand();
         const FPS = 24;
 
-        // Helper to check if effect uses zoompan (all effects except 'none')
-        const isZoompanEffect = (effect: KenBurnsEffect): boolean => effect !== 'none';
+        // Helper to check if config uses zoompan (all motions except 'none')
+        const isZoompanEffect = (config: KenBurnsConfig): boolean => config.motion !== 'none';
 
         // Add all images as inputs with loop
-        // For zoompan effects, we use single frame input; zoompan's d parameter controls duration
-        // For 'none', we use -t to control input duration
         imagePaths.forEach((imagePath, index) => {
-          const effect = effects[index];
+          const config = configs[index];
 
-          if (isZoompanEffect(effect)) {
-            // For zoompan effects: use -framerate 1 to get single frame
+          if (isZoompanEffect(config)) {
             command
               .input(imagePath)
               .inputOptions([
                 '-loop 1',
-                '-framerate 1',  // 1 fps input - zoompan will generate the frames
-                '-t 1',          // Just 1 second of input (1 frame at 1fps)
+                '-framerate 1',
+                '-t 1',
               ]);
           } else {
-            // For 'none': standard loop with duration
             command
               .input(imagePath)
               .inputOptions([
@@ -846,16 +843,15 @@ export class VideoComposer implements IVideoComposer {
           }
         });
 
-        // Build filter for each image based on Ken Burns effect
+        // Build filter for each image based on Ken Burns config
         const filters: string[] = [];
 
         imagePaths.forEach((_, index) => {
           const duration = durations[index];
-          const effect = effects[index];
+          const config = configs[index];
           const frames = Math.ceil(duration * FPS);
 
-          // Debug logging
-          console.log(`[ImageToVideo] Image ${index}: effect='${effect}', duration=${duration}s, frames=${frames}`);
+          console.log(`[ImageToVideo] Image ${index}: motion='${config.motion}', direction='${config.direction}', speed='${config.speed}', duration=${duration}s`);
 
           // Helper to build zoompan filter string
           const buildZoompanFilter = (
@@ -872,233 +868,97 @@ export class VideoComposer implements IVideoComposer {
             );
           };
 
-          // Easing expressions for smooth, cinematic motion
-          // t = normalized time (0→1), using quadratic easing
+          // Easing expressions
           const t = `(on/${frames})`;
-          const easeOut = `(1-(1-${t})*(1-${t}))`;           // Fast start, slow end
-          const easeIn = `(${t}*${t})`;                       // Slow start, fast end
-          const easeInOut = `if(lt(${t},0.5),2*${t}*${t},1-(-2*${t}+2)*(-2*${t}+2)/2)`; // S-curve
+          const easeOut = `(1-(1-${t})*(1-${t}))`;
+          const easeIn = `(${t}*${t})`;
+          const easeInOut = `if(lt(${t},0.5),2*${t}*${t},1-(-2*${t}+2)*(-2*${t}+2)/2)`;
 
-          switch (effect) {
-            // ===== Standard zoom with smooth easing =====
-            case 'zoomIn':
-              // Cinematic zoom in: ease-out (fast start → gentle stop)
+          // Speed multipliers
+          const speedMultiplier: Record<MotionSpeed, number> = {
+            slow: 0.12,
+            normal: 0.25,
+            fast: 0.45,
+          };
+          const speed = config.speed || 'normal';
+          const zoomAmount = speedMultiplier[speed];
+          const panAmount = speed === 'slow' ? 0.06 : speed === 'fast' ? 0.15 : 0.1;
+
+          // Direction offsets for zoom
+          const getZoomPosition = (dir: ZoomDirection): { x: string; y: string } => {
+            switch (dir) {
+              case 'left':
+                return { x: `iw/3-(iw/zoom/2)`, y: 'ih/2-(ih/zoom/2)' };
+              case 'right':
+                return { x: `2*iw/3-(iw/zoom/2)`, y: 'ih/2-(ih/zoom/2)' };
+              case 'top':
+                return { x: 'iw/2-(iw/zoom/2)', y: `ih/3-(ih/zoom/2)` };
+              case 'bottom':
+                return { x: 'iw/2-(iw/zoom/2)', y: `2*ih/3-(ih/zoom/2)` };
+              case 'center':
+              default:
+                return { x: 'iw/2-(iw/zoom/2)', y: 'ih/2-(ih/zoom/2)' };
+            }
+          };
+
+          const { motion, direction = 'center' } = config;
+
+          switch (motion) {
+            case 'zoomIn': {
+              const pos = getZoomPosition(direction);
               filters.push(buildZoompanFilter(
-                `1+0.25*${easeOut}`,
-                'iw/2-(iw/zoom/2)',
-                'ih/2-(ih/zoom/2)',
+                `1+${zoomAmount}*${easeOut}`,
+                pos.x,
+                pos.y,
               ));
               break;
+            }
 
-            case 'zoomOut':
-              // Cinematic zoom out: ease-in (gentle start → fast end)
+            case 'zoomOut': {
+              const pos = getZoomPosition(direction);
+              const startZoom = 1 + zoomAmount;
               filters.push(buildZoompanFilter(
-                `1.25-0.25*${easeIn}`,
-                'iw/2-(iw/zoom/2)',
-                'ih/2-(ih/zoom/2)',
+                `${startZoom}-${zoomAmount}*${easeIn}`,
+                pos.x,
+                pos.y,
               ));
               break;
+            }
 
-            // ===== Speed variations with easing =====
-            case 'zoomInSlow':
-              // Subtle, gentle zoom with smooth deceleration
-              filters.push(buildZoompanFilter(
-                `1+0.12*${easeOut}`,
-                'iw/2-(iw/zoom/2)',
-                'ih/2-(ih/zoom/2)',
-              ));
-              break;
-
-            case 'zoomInFast':
-              // Dramatic zoom with strong easing
-              filters.push(buildZoompanFilter(
-                `1+0.5*${easeOut}`,
-                'iw/2-(iw/zoom/2)',
-                'ih/2-(ih/zoom/2)',
-              ));
-              break;
-
-            case 'zoomOutSlow':
-              // Gentle zoom out
-              filters.push(buildZoompanFilter(
-                `1.12-0.12*${easeIn}`,
-                'iw/2-(iw/zoom/2)',
-                'ih/2-(ih/zoom/2)',
-              ));
-              break;
-
-            case 'zoomOutFast':
-              // Dramatic zoom out
-              filters.push(buildZoompanFilter(
-                `1.5-0.5*${easeIn}`,
-                'iw/2-(iw/zoom/2)',
-                'ih/2-(ih/zoom/2)',
-              ));
-              break;
-
-            // ===== Position variations with zoom + subtle drift =====
-            case 'zoomInLeft':
-              // Zoom into left with subtle rightward drift (parallax feel)
-              filters.push(buildZoompanFilter(
-                `1+0.35*${easeOut}`,
-                `iw/3-(iw/zoom/2)+0.04*iw*${easeOut}`,
-                'ih/2-(ih/zoom/2)',
-              ));
-              break;
-
-            case 'zoomInRight':
-              // Zoom into right with subtle leftward drift
-              filters.push(buildZoompanFilter(
-                `1+0.35*${easeOut}`,
-                `2*iw/3-(iw/zoom/2)-0.04*iw*${easeOut}`,
-                'ih/2-(ih/zoom/2)',
-              ));
-              break;
-
-            case 'zoomInTop':
-              // Zoom into top with subtle downward drift
-              filters.push(buildZoompanFilter(
-                `1+0.35*${easeOut}`,
-                'iw/2-(iw/zoom/2)',
-                `ih/3-(ih/zoom/2)+0.04*ih*${easeOut}`,
-              ));
-              break;
-
-            case 'zoomInBottom':
-              // Zoom into bottom with subtle upward drift
-              filters.push(buildZoompanFilter(
-                `1+0.35*${easeOut}`,
-                'iw/2-(iw/zoom/2)',
-                `2*ih/3-(ih/zoom/2)-0.04*ih*${easeOut}`,
-              ));
-              break;
-
-            // ===== Pan effects with smooth S-curve easing =====
             case 'panLeft':
-              // Smooth pan right→left with ease-in-out
               filters.push(buildZoompanFilter(
                 '1.2',
-                `iw/2-(iw/zoom/2)+0.1*iw*(1-${easeInOut})`,
+                `iw/2-(iw/zoom/2)+${panAmount}*iw*(1-${easeInOut})`,
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'panRight':
-              // Smooth pan left→right with ease-in-out
               filters.push(buildZoompanFilter(
                 '1.2',
-                `iw/2-(iw/zoom/2)-0.1*iw*(1-${easeInOut})`,
+                `iw/2-(iw/zoom/2)-${panAmount}*iw*(1-${easeInOut})`,
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'panUp':
-              // Smooth pan bottom→top with ease-in-out
               filters.push(buildZoompanFilter(
                 '1.2',
                 'iw/2-(iw/zoom/2)',
-                `ih/2-(ih/zoom/2)+0.1*ih*(1-${easeInOut})`,
+                `ih/2-(ih/zoom/2)+${panAmount}*ih*(1-${easeInOut})`,
               ));
               break;
 
             case 'panDown':
-              // Smooth pan top→bottom with ease-in-out
               filters.push(buildZoompanFilter(
                 '1.2',
                 'iw/2-(iw/zoom/2)',
-                `ih/2-(ih/zoom/2)-0.1*ih*(1-${easeInOut})`,
+                `ih/2-(ih/zoom/2)-${panAmount}*ih*(1-${easeInOut})`,
               ));
               break;
 
-            // ===== Parallax effects (zoom + pan with different timing for depth illusion) =====
-            case 'parallaxLeft':
-              // Zoom in while panning left - pan leads, zoom follows (creates depth)
-              // Pan uses ease-in-out, zoom uses slower ease-out
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,  // Zoom follows (slower)
-                `iw/2-(iw/zoom/2)+0.12*iw*(1-${easeInOut})`,  // Pan leads (faster start)
-                `ih/2-(ih/zoom/2)+0.02*ih*${easeOut}`,  // Slight vertical drift
-              ));
-              break;
-
-            case 'parallaxRight':
-              // Zoom in while panning right
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)-0.12*iw*(1-${easeInOut})`,
-                `ih/2-(ih/zoom/2)-0.02*ih*${easeOut}`,
-              ));
-              break;
-
-            case 'parallaxUp':
-              // Zoom in while panning up
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)+0.02*iw*${easeOut}`,
-                `ih/2-(ih/zoom/2)+0.12*ih*(1-${easeInOut})`,
-              ));
-              break;
-
-            case 'parallaxDown':
-              // Zoom in while panning down
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)-0.02*iw*${easeOut}`,
-                `ih/2-(ih/zoom/2)-0.12*ih*(1-${easeInOut})`,
-              ));
-              break;
-
-            case 'parallaxZoom':
-              // Deep zoom with subtle organic drift (breathing effect)
-              // Uses sine-like motion for natural feel
-              filters.push(buildZoompanFilter(
-                `1+0.4*${easeOut}`,
-                `iw/2-(iw/zoom/2)+0.015*iw*sin(${t}*3.14159)`,  // Gentle horizontal sway
-                `ih/2-(ih/zoom/2)+0.01*ih*sin(${t}*3.14159*0.7)`,  // Offset vertical sway
-              ));
-              break;
-
-            // ===== Diagonal drift effects (smooth corner-to-corner movement) =====
-            case 'driftTopLeft':
-              // Drift towards top-left with zoom
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)+0.08*iw*(1-${easeInOut})`,  // Move left
-                `ih/2-(ih/zoom/2)+0.06*ih*(1-${easeInOut})`,  // Move up
-              ));
-              break;
-
-            case 'driftTopRight':
-              // Drift towards top-right with zoom
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)-0.08*iw*(1-${easeInOut})`,
-                `ih/2-(ih/zoom/2)+0.06*ih*(1-${easeInOut})`,
-              ));
-              break;
-
-            case 'driftBottomLeft':
-              // Drift towards bottom-left with zoom
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)+0.08*iw*(1-${easeInOut})`,
-                `ih/2-(ih/zoom/2)-0.06*ih*(1-${easeInOut})`,
-              ));
-              break;
-
-            case 'driftBottomRight':
-              // Drift towards bottom-right with zoom
-              filters.push(buildZoompanFilter(
-                `1+0.3*${easeOut}`,
-                `iw/2-(iw/zoom/2)-0.08*iw*(1-${easeInOut})`,
-                `ih/2-(ih/zoom/2)-0.06*ih*(1-${easeInOut})`,
-              ));
-              break;
-
-            // ===== No effect =====
             case 'none':
             default:
-              // Standard scale with padding, no zoompan
               filters.push(
                 `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,` +
                 `pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${FPS}[v${index}]`
@@ -1111,7 +971,7 @@ export class VideoComposer implements IVideoComposer {
         const concatInputs = imagePaths.map((_, index) => `[v${index}]`).join('');
         const filterString = `${scaleFilters};${concatInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
 
-        console.log(`[ImageToVideo] Ken Burns effects: ${effects.join(', ')}`);
+        console.log(`[ImageToVideo] Ken Burns configs: ${configs.map(c => c.motion).join(', ')}`);
         console.log(`[ImageToVideo] Generated filter: ${filterString.substring(0, 200)}...`);
         debugLog(`[ImageToVideo] Filter: ${filterString}`);
 

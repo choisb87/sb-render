@@ -239,12 +239,23 @@ export class FFmpegCommand extends EventEmitter {
     return this;
   }
 
+  // Helper to split option strings like "-loop 1" into ["-loop", "1"]
+  private splitOptions(options: string[]): string[] {
+    const result: string[] = [];
+    for (const opt of options) {
+      // Split by space but preserve the option format
+      const parts = opt.trim().split(/\s+/);
+      result.push(...parts);
+    }
+    return result;
+  }
+
   private buildArgs(): string[] {
     const args: string[] = ['-y']; // Overwrite output
 
     // Add inputs with their options
     for (const input of this.inputs) {
-      args.push(...input.options);
+      args.push(...this.splitOptions(input.options));
       args.push('-i', input.path);
     }
 
@@ -264,7 +275,7 @@ export class FFmpegCommand extends EventEmitter {
     }
 
     // Output options (must come before codec options for proper ordering)
-    args.push(...this.outputOpts);
+    args.push(...this.splitOptions(this.outputOpts));
 
     // Codecs (only if not already in outputOpts)
     if (this.videoCodec_ && !this.outputOpts.some(o => o.includes('-c:v') || o.includes('-vcodec'))) {

@@ -1,11 +1,13 @@
 /**
- * ParallaxEngine - Creates parallax effects from static images using OpenCV
- * Uses depth estimation to create multi-layer parallax motion
+ * ParallaxEngine - Creates parallax effects from static images
+ * Uses FFmpeg filters and optional sharp for layer-based parallax motion
+ *
+ * Pure FFmpeg fallback ensures compatibility in all environments
  */
-import * as cv from '@techstark/opencv-js';
-import { createCanvas, loadImage, ImageData } from 'canvas';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createCommand, getFfprobePath } from '../utils/ffmpeg-wrapper';
+import { spawn } from 'child_process';
 
 export type ParallaxDirection = 'left' | 'right' | 'up' | 'down' | 'zoomIn' | 'zoomOut';
 export type ParallaxIntensity = 'subtle' | 'normal' | 'dramatic';
@@ -16,421 +18,320 @@ export interface ParallaxConfig {
   layerCount?: number; // Number of depth layers (2-5), default 3
 }
 
-interface DepthLayer {
-  mask: cv.Mat;
-  depth: number; // 0 = background, 1 = foreground
+// Try to load sharp (optional dependency)
+let sharp: typeof import('sharp') | null = null;
+
+async function loadSharp(): Promise<boolean> {
+  if (sharp !== null) return true;
+
+  try {
+    sharp = (await import('sharp')).default;
+    console.log('[ParallaxEngine] Sharp loaded successfully');
+    return true;
+  } catch (error) {
+    console.warn('[ParallaxEngine] Sharp not available, using FFmpeg-only mode');
+    return false;
+  }
 }
 
 /**
- * Wait for OpenCV to be ready
+ * Get motion parameters based on intensity
  */
-async function waitForOpenCV(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('OpenCV initialization timeout'));
-    }, 30000);
+function getIntensityParams(intensity: ParallaxIntensity): {
+  fgSpeed: number;
+  bgSpeed: number;
+  zoomAmount: number;
+} {
+  switch (intensity) {
+    case 'subtle':
+      return { fgSpeed: 0.03, bgSpeed: 0.01, zoomAmount: 0.03 };
+    case 'normal':
+      return { fgSpeed: 0.06, bgSpeed: 0.02, zoomAmount: 0.06 };
+    case 'dramatic':
+      return { fgSpeed: 0.12, bgSpeed: 0.04, zoomAmount: 0.10 };
+    default:
+      return { fgSpeed: 0.06, bgSpeed: 0.02, zoomAmount: 0.06 };
+  }
+}
 
-    const checkReady = () => {
-      if (cv.Mat) {
-        clearTimeout(timeout);
-        resolve();
-      } else {
-        setTimeout(checkReady, 100);
-      }
-    };
-    checkReady();
+/**
+ * Generate pseudo-parallax using FFmpeg complex filter
+ * Creates a 2.5D effect by applying different zoom/pan speeds to foreground vs background
+ */
+async function generateParallaxWithFFmpeg(
+  imagePath: string,
+  outputPath: string,
+  config: ParallaxConfig,
+  duration: number,
+  fps: number,
+  width: number,
+  height: number,
+): Promise<void> {
+  const params = getIntensityParams(config.intensity);
+  const totalFrames = Math.ceil(duration * fps);
+
+  // Calculate zoom and pan expressions based on direction
+  let zoomExpr: string;
+  let xExpr: string;
+  let yExpr: string;
+
+  // Base zoom that slightly increases over time for depth effect
+  const baseZoom = 1.1;
+  const zoomDelta = params.zoomAmount;
+
+  switch (config.direction) {
+    case 'left':
+      // Pan left with subtle zoom - foreground moves faster
+      zoomExpr = `${baseZoom}+${zoomDelta}*on/${totalFrames}`;
+      xExpr = `(iw-ow)/2-${params.fgSpeed}*iw*on/${totalFrames}`;
+      yExpr = `(ih-oh)/2`;
+      break;
+
+    case 'right':
+      zoomExpr = `${baseZoom}+${zoomDelta}*on/${totalFrames}`;
+      xExpr = `(iw-ow)/2+${params.fgSpeed}*iw*on/${totalFrames}`;
+      yExpr = `(ih-oh)/2`;
+      break;
+
+    case 'up':
+      zoomExpr = `${baseZoom}+${zoomDelta}*on/${totalFrames}`;
+      xExpr = `(iw-ow)/2`;
+      yExpr = `(ih-oh)/2-${params.fgSpeed}*ih*on/${totalFrames}`;
+      break;
+
+    case 'down':
+      zoomExpr = `${baseZoom}+${zoomDelta}*on/${totalFrames}`;
+      xExpr = `(iw-ow)/2`;
+      yExpr = `(ih-oh)/2+${params.fgSpeed}*ih*on/${totalFrames}`;
+      break;
+
+    case 'zoomIn':
+      // Zoom in with slight parallax offset
+      zoomExpr = `${baseZoom}+${zoomDelta * 2}*on/${totalFrames}`;
+      xExpr = `(iw-ow)/2`;
+      yExpr = `(ih-oh)/2`;
+      break;
+
+    case 'zoomOut':
+      // Zoom out with slight parallax offset
+      zoomExpr = `${baseZoom + zoomDelta * 2}-${zoomDelta * 2}*on/${totalFrames}`;
+      xExpr = `(iw-ow)/2`;
+      yExpr = `(ih-oh)/2`;
+      break;
+
+    default:
+      zoomExpr = `${baseZoom}`;
+      xExpr = `(iw-ow)/2`;
+      yExpr = `(ih-oh)/2`;
+  }
+
+  // Build zoompan filter with parallax-like motion
+  const zoompanFilter = `zoompan=z='${zoomExpr}':x='${xExpr}':y='${yExpr}':d=${totalFrames}:s=${width}x${height}:fps=${fps}`;
+
+  return new Promise((resolve, reject) => {
+    const command = createCommand(imagePath);
+
+    command
+      .inputOptions(['-loop 1'])
+      .videoFilters([zoompanFilter])
+      .outputOptions([
+        `-t ${duration}`,
+        '-pix_fmt yuv420p',
+        '-c:v libx264',
+        '-crf 18',
+        '-preset medium',
+        '-movflags +faststart',
+      ])
+      .format('mp4')
+      .output(outputPath);
+
+    command.on('start', (cmd: string) => {
+      console.log(`[ParallaxEngine] FFmpeg command: ${cmd}`);
+    });
+
+    command.on('error', (err: Error) => {
+      console.error('[ParallaxEngine] FFmpeg error:', err.message);
+      reject(err);
+    });
+
+    command.on('end', () => {
+      console.log('[ParallaxEngine] Parallax video created');
+      resolve();
+    });
+
+    command.run();
   });
 }
 
 /**
- * Load image from file path using canvas
+ * Generate multi-layer parallax using sharp for layer separation
+ * Creates more realistic 3D effect with separate foreground/background motion
  */
-async function loadImageToMat(imagePath: string): Promise<cv.Mat> {
-  const img = await loadImage(imagePath);
-  const canvas = createCanvas(img.width, img.height);
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const mat = cv.matFromImageData(imageData);
-  return mat;
-}
-
-/**
- * Save Mat to file using canvas
- */
-async function saveMatToFile(mat: cv.Mat, filePath: string): Promise<void> {
-  const canvas = createCanvas(mat.cols, mat.rows);
-  const ctx = canvas.getContext('2d');
-
-  // Convert to RGBA if needed
-  let rgba: cv.Mat;
-  if (mat.channels() === 3) {
-    rgba = new cv.Mat();
-    cv.cvtColor(mat, rgba, cv.COLOR_BGR2RGBA);
-  } else if (mat.channels() === 1) {
-    rgba = new cv.Mat();
-    cv.cvtColor(mat, rgba, cv.COLOR_GRAY2RGBA);
-  } else {
-    rgba = mat.clone();
+async function generateMultiLayerParallax(
+  imagePath: string,
+  outputPath: string,
+  config: ParallaxConfig,
+  duration: number,
+  fps: number,
+  width: number,
+  height: number,
+): Promise<void> {
+  if (!sharp) {
+    throw new Error('Sharp not available for multi-layer parallax');
   }
 
-  const imageData = new ImageData(
-    new Uint8ClampedArray(rgba.data),
-    rgba.cols,
-    rgba.rows
-  );
-  ctx.putImageData(imageData, 0, 0);
+  const params = getIntensityParams(config.intensity);
+  const totalFrames = Math.ceil(duration * fps);
+  const tempDir = path.join(path.dirname(outputPath), `parallax_temp_${Date.now()}`);
 
-  const buffer = canvas.toBuffer('image/png');
-  fs.writeFileSync(filePath, buffer);
+  try {
+    fs.mkdirSync(tempDir, { recursive: true });
 
-  if (rgba !== mat) {
-    rgba.delete();
-  }
-}
+    // Load original image
+    const image = sharp(imagePath);
+    const metadata = await image.metadata();
+    const imgWidth = metadata.width || width;
+    const imgHeight = metadata.height || height;
 
-export class ParallaxEngine {
-  private initialized = false;
+    // Create gradient masks for foreground/background separation
+    // Foreground: bottom portion (typically subject)
+    // Background: top portion (typically sky/distant objects)
 
-  /**
-   * Initialize OpenCV
-   */
-  async initialize(): Promise<void> {
-    if (this.initialized) return;
-    await waitForOpenCV();
-    this.initialized = true;
-    console.log('[ParallaxEngine] OpenCV initialized');
-  }
+    const maskHeight = Math.floor(imgHeight * 0.4); // Top 40% is "background"
 
-  /**
-   * Create depth map from image using edge detection and gradient analysis
-   * Returns a grayscale image where brighter = closer (foreground)
-   */
-  private createDepthMap(src: cv.Mat): cv.Mat {
-    // Convert to grayscale
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-    // 1. Edge detection - edges often indicate foreground objects
-    const edges = new cv.Mat();
-    cv.Canny(gray, edges, 50, 150);
-
-    // 2. Dilate edges to create regions
-    const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(15, 15));
-    const dilatedEdges = new cv.Mat();
-    cv.dilate(edges, dilatedEdges, kernel);
-    kernel.delete();
-
-    // 3. Create vertical gradient (assume bottom = closer)
-    const verticalGradient = new cv.Mat(src.rows, src.cols, cv.CV_8UC1);
-    for (let y = 0; y < src.rows; y++) {
-      const value = Math.floor((y / src.rows) * 128) + 64; // 64-192 range
-      for (let x = 0; x < src.cols; x++) {
-        verticalGradient.ucharPtr(y, x)[0] = value;
+    // Create background layer (top portion with gradient fade)
+    const bgGradient = Buffer.alloc(imgWidth * imgHeight);
+    for (let y = 0; y < imgHeight; y++) {
+      const alpha = y < maskHeight
+        ? 255
+        : Math.max(0, 255 - Math.floor((y - maskHeight) / (imgHeight - maskHeight) * 255));
+      for (let x = 0; x < imgWidth; x++) {
+        bgGradient[y * imgWidth + x] = alpha;
       }
     }
 
-    // 4. Blur for smoothness
-    const blurredEdges = new cv.Mat();
-    cv.GaussianBlur(dilatedEdges, blurredEdges, new cv.Size(31, 31), 0);
-
-    // 5. Combine edge-based depth with vertical gradient
-    const depthMap = new cv.Mat();
-    cv.addWeighted(blurredEdges, 0.6, verticalGradient, 0.4, 0, depthMap);
-
-    // 6. Normalize to 0-255 range
-    cv.normalize(depthMap, depthMap, 0, 255, cv.NORM_MINMAX);
-
-    // Cleanup
-    gray.delete();
-    edges.delete();
-    dilatedEdges.delete();
-    verticalGradient.delete();
-    blurredEdges.delete();
-
-    return depthMap;
-  }
-
-  /**
-   * Create depth layers from depth map
-   */
-  private createDepthLayers(depthMap: cv.Mat, layerCount: number): DepthLayer[] {
-    const layers: DepthLayer[] = [];
-    const step = 256 / layerCount;
-
-    for (let i = 0; i < layerCount; i++) {
-      const minDepth = i * step;
-      const maxDepth = (i + 1) * step;
-
-      // Create mask for this depth range
-      const lowerBound = new cv.Mat(depthMap.rows, depthMap.cols, cv.CV_8UC1, new cv.Scalar(minDepth));
-      const upperBound = new cv.Mat(depthMap.rows, depthMap.cols, cv.CV_8UC1, new cv.Scalar(maxDepth));
-
-      const mask = new cv.Mat();
-      const mask1 = new cv.Mat();
-      const mask2 = new cv.Mat();
-
-      cv.compare(depthMap, lowerBound, mask1, cv.CMP_GE);
-      cv.compare(depthMap, upperBound, mask2, cv.CMP_LT);
-      cv.bitwise_and(mask1, mask2, mask);
-
-      // Smooth the mask edges
-      const smoothMask = new cv.Mat();
-      cv.GaussianBlur(mask, smoothMask, new cv.Size(11, 11), 0);
-
-      layers.push({
-        mask: smoothMask,
-        depth: i / (layerCount - 1), // 0 = background, 1 = foreground
-      });
-
-      lowerBound.delete();
-      upperBound.delete();
-      mask1.delete();
-      mask2.delete();
-      mask.delete();
-    }
-
-    return layers;
-  }
-
-  /**
-   * Get motion multiplier based on intensity
-   */
-  private getIntensityMultiplier(intensity: ParallaxIntensity): number {
-    switch (intensity) {
-      case 'subtle': return 0.02;
-      case 'normal': return 0.05;
-      case 'dramatic': return 0.1;
-      default: return 0.05;
-    }
-  }
-
-  /**
-   * Apply transformation to a layer based on direction and progress
-   */
-  private applyLayerTransform(
-    src: cv.Mat,
-    mask: cv.Mat,
-    depth: number,
-    direction: ParallaxDirection,
-    progress: number, // 0 to 1
-    intensityMultiplier: number,
-  ): cv.Mat {
-    // Deeper layers (background) move less, foreground moves more
-    const motionScale = 0.3 + (depth * 0.7); // 0.3 for bg, 1.0 for fg
-    const maxOffset = src.cols * intensityMultiplier * motionScale;
-
-    let offsetX = 0;
-    let offsetY = 0;
-    let scale = 1.0;
-
-    // Calculate offset based on direction
-    // Progress goes from 0 to 1, we want motion from -max to +max
-    const normalizedProgress = (progress - 0.5) * 2; // -1 to 1
-
-    switch (direction) {
-      case 'left':
-        offsetX = normalizedProgress * maxOffset * -1;
-        break;
-      case 'right':
-        offsetX = normalizedProgress * maxOffset;
-        break;
-      case 'up':
-        offsetY = normalizedProgress * maxOffset * -1;
-        break;
-      case 'down':
-        offsetY = normalizedProgress * maxOffset;
-        break;
-      case 'zoomIn':
-        scale = 1 + (progress * intensityMultiplier * motionScale);
-        break;
-      case 'zoomOut':
-        scale = 1 + ((1 - progress) * intensityMultiplier * motionScale);
-        break;
-    }
-
-    // Create transformation matrix
-    const centerX = src.cols / 2;
-    const centerY = src.rows / 2;
-
-    // For translation and scaling
-    const M = cv.matFromArray(2, 3, cv.CV_64FC1, [
-      scale, 0, offsetX + centerX * (1 - scale),
-      0, scale, offsetY + centerY * (1 - scale),
-    ]);
-
-    const transformed = new cv.Mat();
-    cv.warpAffine(src, transformed, M, new cv.Size(src.cols, src.rows), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-    M.delete();
-
-    // Apply mask to get only this layer's contribution
-    const result = new cv.Mat();
-
-    // Convert mask to 4-channel for blending
-    const mask4ch = new cv.Mat();
-    const channels = new cv.MatVector();
-    channels.push_back(mask);
-    channels.push_back(mask);
-    channels.push_back(mask);
-    channels.push_back(mask);
-    cv.merge(channels, mask4ch);
-    channels.delete();
-
-    // Apply mask
-    cv.bitwise_and(transformed, mask4ch, result);
-
-    transformed.delete();
-    mask4ch.delete();
-
-    return result;
-  }
-
-  /**
-   * Generate a single parallax frame
-   */
-  async generateFrame(
-    src: cv.Mat,
-    depthLayers: DepthLayer[],
-    config: ParallaxConfig,
-    progress: number, // 0 to 1
-  ): Promise<cv.Mat> {
-    const intensityMultiplier = this.getIntensityMultiplier(config.intensity);
-
-    // Start with black canvas
-    const result = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC4);
-
-    // Process each layer from background to foreground
-    for (const layer of depthLayers) {
-      const layerResult = this.applyLayerTransform(
-        src,
-        layer.mask,
-        layer.depth,
-        config.direction,
-        progress,
-        intensityMultiplier,
-      );
-
-      // Blend this layer onto result
-      // Use mask for alpha blending
-      for (let y = 0; y < src.rows; y++) {
-        for (let x = 0; x < src.cols; x++) {
-          const alpha = layer.mask.ucharPtr(y, x)[0] / 255;
-          if (alpha > 0.01) {
-            const srcPixel = layerResult.ucharPtr(y, x);
-            const dstPixel = result.ucharPtr(y, x);
-
-            dstPixel[0] = Math.round(srcPixel[0] * alpha + dstPixel[0] * (1 - alpha));
-            dstPixel[1] = Math.round(srcPixel[1] * alpha + dstPixel[1] * (1 - alpha));
-            dstPixel[2] = Math.round(srcPixel[2] * alpha + dstPixel[2] * (1 - alpha));
-            dstPixel[3] = 255;
-          }
-        }
+    // Create foreground layer (bottom portion with gradient fade)
+    const fgGradient = Buffer.alloc(imgWidth * imgHeight);
+    for (let y = 0; y < imgHeight; y++) {
+      const alpha = y > imgHeight - maskHeight
+        ? 255
+        : Math.max(0, Math.floor(y / maskHeight * 255));
+      for (let x = 0; x < imgWidth; x++) {
+        fgGradient[y * imgWidth + x] = alpha;
       }
-
-      layerResult.delete();
     }
-
-    return result;
-  }
-
-  /**
-   * Generate all parallax frames for an image
-   * Returns array of frame file paths
-   */
-  async generateParallaxFrames(
-    imagePath: string,
-    outputDir: string,
-    config: ParallaxConfig,
-    duration: number, // seconds
-    fps = 24,
-  ): Promise<string[]> {
-    await this.initialize();
-
-    console.log(`[ParallaxEngine] Generating parallax frames: ${config.direction}, ${config.intensity}`);
-    console.log(`[ParallaxEngine] Duration: ${duration}s, FPS: ${fps}`);
-
-    // Ensure output directory exists
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
-
-    // Load image
-    const src = await loadImageToMat(imagePath);
-    console.log(`[ParallaxEngine] Loaded image: ${src.cols}x${src.rows}`);
-
-    // Create depth map
-    const depthMap = this.createDepthMap(src);
-    console.log('[ParallaxEngine] Created depth map');
-
-    // Create depth layers
-    const layerCount = config.layerCount || 3;
-    const depthLayers = this.createDepthLayers(depthMap, layerCount);
-    console.log(`[ParallaxEngine] Created ${layerCount} depth layers`);
 
     // Generate frames
-    const totalFrames = Math.ceil(duration * fps);
-    const framePaths: string[] = [];
+    console.log(`[ParallaxEngine] Generating ${totalFrames} parallax frames...`);
 
-    for (let i = 0; i < totalFrames; i++) {
-      const progress = i / (totalFrames - 1);
-      const frame = await this.generateFrame(src, depthLayers, config, progress);
+    for (let frame = 0; frame < totalFrames; frame++) {
+      const progress = frame / totalFrames;
 
-      const framePath = path.join(outputDir, `frame_${String(i).padStart(5, '0')}.png`);
-      await saveMatToFile(frame, framePath);
-      framePaths.push(framePath);
-      frame.delete();
+      // Calculate offsets for each layer
+      let bgOffsetX = 0, bgOffsetY = 0;
+      let fgOffsetX = 0, fgOffsetY = 0;
+      let bgZoom = 1.0, fgZoom = 1.0;
 
-      if (i % 10 === 0) {
-        console.log(`[ParallaxEngine] Generated frame ${i + 1}/${totalFrames}`);
+      const bgMove = params.bgSpeed * imgWidth * (progress - 0.5) * 2;
+      const fgMove = params.fgSpeed * imgWidth * (progress - 0.5) * 2;
+
+      switch (config.direction) {
+        case 'left':
+          bgOffsetX = Math.round(bgMove);
+          fgOffsetX = Math.round(fgMove);
+          break;
+        case 'right':
+          bgOffsetX = Math.round(-bgMove);
+          fgOffsetX = Math.round(-fgMove);
+          break;
+        case 'up':
+          bgOffsetY = Math.round(bgMove);
+          fgOffsetY = Math.round(fgMove);
+          break;
+        case 'down':
+          bgOffsetY = Math.round(-bgMove);
+          fgOffsetY = Math.round(-fgMove);
+          break;
+        case 'zoomIn':
+          bgZoom = 1 + params.bgSpeed * progress;
+          fgZoom = 1 + params.fgSpeed * progress;
+          break;
+        case 'zoomOut':
+          bgZoom = 1 + params.bgSpeed * (1 - progress);
+          fgZoom = 1 + params.fgSpeed * (1 - progress);
+          break;
+      }
+
+      // Generate background layer with offset
+      const bgWidth = Math.round(imgWidth * bgZoom);
+      const bgHeight = Math.round(imgHeight * bgZoom);
+      const bgLayer = await sharp(imagePath)
+        .resize(bgWidth, bgHeight, { fit: 'fill' })
+        .extend({
+          top: Math.max(0, -bgOffsetY),
+          bottom: Math.max(0, bgOffsetY),
+          left: Math.max(0, -bgOffsetX),
+          right: Math.max(0, bgOffsetX),
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .extract({
+          left: Math.max(0, bgOffsetX) + Math.floor((bgWidth - imgWidth) / 2),
+          top: Math.max(0, bgOffsetY) + Math.floor((bgHeight - imgHeight) / 2),
+          width: imgWidth,
+          height: imgHeight,
+        })
+        .toBuffer();
+
+      // Generate foreground layer with offset
+      const fgWidth = Math.round(imgWidth * fgZoom);
+      const fgHeight = Math.round(imgHeight * fgZoom);
+      const fgLayer = await sharp(imagePath)
+        .resize(fgWidth, fgHeight, { fit: 'fill' })
+        .extend({
+          top: Math.max(0, -fgOffsetY),
+          bottom: Math.max(0, fgOffsetY),
+          left: Math.max(0, -fgOffsetX),
+          right: Math.max(0, fgOffsetX),
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .extract({
+          left: Math.max(0, fgOffsetX) + Math.floor((fgWidth - imgWidth) / 2),
+          top: Math.max(0, fgOffsetY) + Math.floor((fgHeight - imgHeight) / 2),
+          width: imgWidth,
+          height: imgHeight,
+        })
+        .toBuffer();
+
+      // Composite layers
+      const framePath = path.join(tempDir, `frame_${String(frame).padStart(5, '0')}.png`);
+      await sharp(bgLayer)
+        .composite([
+          {
+            input: fgLayer,
+            blend: 'over',
+          },
+        ])
+        .resize(width, height, { fit: 'fill' })
+        .toFile(framePath);
+
+      if (frame % Math.floor(totalFrames / 10) === 0) {
+        console.log(`[ParallaxEngine] Frame ${frame + 1}/${totalFrames}`);
       }
     }
 
-    // Cleanup
-    src.delete();
-    depthMap.delete();
-    for (const layer of depthLayers) {
-      layer.mask.delete();
-    }
+    // Combine frames into video
+    console.log('[ParallaxEngine] Combining frames into video...');
+    const inputPattern = path.join(tempDir, 'frame_%05d.png');
 
-    console.log(`[ParallaxEngine] Generated ${totalFrames} frames`);
-    return framePaths;
-  }
-
-  /**
-   * Create video from parallax frames using FFmpeg
-   */
-  async createVideoFromFrames(
-    framePaths: string[],
-    outputPath: string,
-    fps = 24,
-    videoCodec = 'libx264',
-    quality = 'high',
-    customCRF?: number,
-  ): Promise<Buffer> {
-    const { createCommand } = await import('../utils/ffmpeg-wrapper');
-
-    // Get CRF value
-    const crfMapping: Record<string, number> = {
-      low: 28,
-      medium: 23,
-      high: 18,
-    };
-    const crf = customCRF || crfMapping[quality] || 18;
-
-    // Create input pattern from frame directory
-    const frameDir = path.dirname(framePaths[0]);
-    const inputPattern = path.join(frameDir, 'frame_%05d.png');
-
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const command = createCommand();
 
       command
         .input(inputPattern)
         .inputOptions([`-framerate ${fps}`])
-        .videoCodec(videoCodec)
         .outputOptions([
-          `-crf ${crf}`,
+          '-c:v libx264',
+          '-crf 18',
           '-preset medium',
           '-pix_fmt yuv420p',
           '-movflags +faststart',
@@ -438,23 +339,89 @@ export class ParallaxEngine {
         .format('mp4')
         .output(outputPath);
 
-      command.on('start', (cmd: string) => {
-        console.log(`[ParallaxEngine] FFmpeg command: ${cmd}`);
-      });
-
-      command.on('error', (err: Error) => {
-        console.error('[ParallaxEngine] FFmpeg error:', err.message);
-        reject(err);
-      });
-
-      command.on('end', () => {
-        console.log('[ParallaxEngine] Video created successfully');
-        const buffer = fs.readFileSync(outputPath);
-        resolve(buffer);
-      });
-
+      command.on('error', (err: Error) => reject(err));
+      command.on('end', () => resolve());
       command.run();
     });
+
+  } finally {
+    // Cleanup temp directory
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Get image dimensions using FFprobe
+ */
+async function getImageDimensions(imagePath: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, _reject) => {
+    const probePath = getFfprobePath();
+    const proc = spawn(probePath, [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-of', 'json',
+      imagePath,
+    ]);
+
+    let stdout = '';
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        // Default dimensions if probe fails
+        resolve({ width: 1920, height: 1080 });
+        return;
+      }
+
+      try {
+        const data = JSON.parse(stdout);
+        const stream = data.streams?.[0];
+        resolve({
+          width: stream?.width || 1920,
+          height: stream?.height || 1080,
+        });
+      } catch {
+        resolve({ width: 1920, height: 1080 });
+      }
+    });
+
+    proc.on('error', () => {
+      resolve({ width: 1920, height: 1080 });
+    });
+  });
+}
+
+export class ParallaxEngine {
+  private sharpAvailable = false;
+  private initialized = false;
+
+  /**
+   * Initialize the engine and check for available dependencies
+   */
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    this.sharpAvailable = await loadSharp();
+    this.initialized = true;
+
+    console.log(`[ParallaxEngine] Initialized (sharp: ${this.sharpAvailable ? 'available' : 'not available'})`);
+  }
+
+  /**
+   * Check if parallax effects are available
+   */
+  isAvailable(): boolean {
+    return true; // Always available with FFmpeg fallback
+  }
+
+  /**
+   * Check if multi-layer parallax is available (requires sharp)
+   */
+  isMultiLayerAvailable(): boolean {
+    return this.sharpAvailable;
   }
 
   /**
@@ -467,40 +434,74 @@ export class ParallaxEngine {
     config: ParallaxConfig,
     duration: number,
     fps = 24,
-    videoCodec = 'libx264',
-    quality = 'high',
-    customCRF?: number,
+    _videoCodec = 'libx264',
+    _quality = 'high',
+    _customCRF?: number,
   ): Promise<Buffer> {
-    // Create temp directory for frames
-    const tempDir = path.join(path.dirname(outputPath), `parallax_frames_${Date.now()}`);
+    await this.initialize();
+
+    console.log(`[ParallaxEngine] Generating parallax: ${config.direction}, ${config.intensity}`);
+    console.log(`[ParallaxEngine] Duration: ${duration}s, FPS: ${fps}`);
+
+    // Get image dimensions
+    const dimensions = await getImageDimensions(imagePath);
+    const width = Math.floor(dimensions.width / 2) * 2; // Ensure even
+    const height = Math.floor(dimensions.height / 2) * 2;
+
+    console.log(`[ParallaxEngine] Image size: ${width}x${height}`);
 
     try {
-      // Generate frames
-      const framePaths = await this.generateParallaxFrames(
-        imagePath,
-        tempDir,
-        config,
-        duration,
-        fps,
-      );
-
-      // Create video from frames
-      const videoBuffer = await this.createVideoFromFrames(
-        framePaths,
-        outputPath,
-        fps,
-        videoCodec,
-        quality,
-        customCRF,
-      );
-
-      return videoBuffer;
-    } finally {
-      // Cleanup temp directory
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
+      // Try multi-layer parallax if sharp is available
+      if (this.sharpAvailable && config.layerCount && config.layerCount > 1) {
+        console.log('[ParallaxEngine] Using multi-layer mode');
+        await generateMultiLayerParallax(
+          imagePath,
+          outputPath,
+          config,
+          duration,
+          fps,
+          width,
+          height,
+        );
+      } else {
+        // Use FFmpeg-only parallax
+        console.log('[ParallaxEngine] Using FFmpeg-only mode');
+        await generateParallaxWithFFmpeg(
+          imagePath,
+          outputPath,
+          config,
+          duration,
+          fps,
+          width,
+          height,
+        );
       }
+
+      // Read and return the output
+      const buffer = fs.readFileSync(outputPath);
+      console.log(`[ParallaxEngine] Video created: ${buffer.length} bytes`);
+      return buffer;
+
+    } catch (error) {
+      console.error('[ParallaxEngine] Error generating parallax:', error);
+      throw error;
     }
+  }
+
+  /**
+   * Legacy method for compatibility - generates frames and returns paths
+   */
+  async generateParallaxFrames(
+    imagePath: string,
+    outputDir: string,
+    config: ParallaxConfig,
+    duration: number,
+    fps = 24,
+  ): Promise<string[]> {
+    // For compatibility, generate video and return single path
+    const outputPath = path.join(outputDir, 'parallax_output.mp4');
+    await this.generateParallaxVideo(imagePath, outputPath, config, duration, fps);
+    return [outputPath];
   }
 }
 

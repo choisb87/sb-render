@@ -1155,6 +1155,26 @@ export class SbRender implements INodeType {
                 type: 'options',
                 options: [
                   {
+                    name: 'Drift Bottom-Left',
+                    value: 'driftBottomLeft',
+                    description: 'Diagonal drift towards bottom-left corner',
+                  },
+                  {
+                    name: 'Drift Bottom-Right',
+                    value: 'driftBottomRight',
+                    description: 'Diagonal drift towards bottom-right corner',
+                  },
+                  {
+                    name: 'Drift Top-Left',
+                    value: 'driftTopLeft',
+                    description: 'Diagonal drift towards top-left corner',
+                  },
+                  {
+                    name: 'Drift Top-Right',
+                    value: 'driftTopRight',
+                    description: 'Diagonal drift towards top-right corner',
+                  },
+                  {
                     name: 'None',
                     value: 'none',
                   },
@@ -1177,6 +1197,31 @@ export class SbRender implements INodeType {
                     name: 'Pan Up',
                     value: 'panUp',
                     description: 'Pan from bottom to top',
+                  },
+                  {
+                    name: 'Parallax Down',
+                    value: 'parallaxDown',
+                    description: 'Zoom in while panning down - creates depth illusion',
+                  },
+                  {
+                    name: 'Parallax Left',
+                    value: 'parallaxLeft',
+                    description: 'Zoom in while panning left - creates depth illusion',
+                  },
+                  {
+                    name: 'Parallax Right',
+                    value: 'parallaxRight',
+                    description: 'Zoom in while panning right - creates depth illusion',
+                  },
+                  {
+                    name: 'Parallax Up',
+                    value: 'parallaxUp',
+                    description: 'Zoom in while panning up - creates depth illusion',
+                  },
+                  {
+                    name: 'Parallax Zoom',
+                    value: 'parallaxZoom',
+                    description: 'Deep zoom with organic breathing motion',
                   },
                   {
                     name: 'Zoom In',

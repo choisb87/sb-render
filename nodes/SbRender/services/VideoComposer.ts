@@ -1114,6 +1114,91 @@ export class VideoComposer implements IVideoComposer {
               ));
               break;
 
+            // ===== Parallax effects (zoom + pan with different timing for depth illusion) =====
+            case 'parallaxLeft':
+              // Zoom in while panning left - pan leads, zoom follows (creates depth)
+              // Pan uses ease-in-out, zoom uses slower ease-out
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,  // Zoom follows (slower)
+                `iw/2-(iw/zoom/2)+0.12*iw*(1-${easeInOut})`,  // Pan leads (faster start)
+                `ih/2-(ih/zoom/2)+0.02*ih*${easeOut}`,  // Slight vertical drift
+              ));
+              break;
+
+            case 'parallaxRight':
+              // Zoom in while panning right
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)-0.12*iw*(1-${easeInOut})`,
+                `ih/2-(ih/zoom/2)-0.02*ih*${easeOut}`,
+              ));
+              break;
+
+            case 'parallaxUp':
+              // Zoom in while panning up
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)+0.02*iw*${easeOut}`,
+                `ih/2-(ih/zoom/2)+0.12*ih*(1-${easeInOut})`,
+              ));
+              break;
+
+            case 'parallaxDown':
+              // Zoom in while panning down
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)-0.02*iw*${easeOut}`,
+                `ih/2-(ih/zoom/2)-0.12*ih*(1-${easeInOut})`,
+              ));
+              break;
+
+            case 'parallaxZoom':
+              // Deep zoom with subtle organic drift (breathing effect)
+              // Uses sine-like motion for natural feel
+              filters.push(buildZoompanFilter(
+                `1+0.4*${easeOut}`,
+                `iw/2-(iw/zoom/2)+0.015*iw*sin(${t}*3.14159)`,  // Gentle horizontal sway
+                `ih/2-(ih/zoom/2)+0.01*ih*sin(${t}*3.14159*0.7)`,  // Offset vertical sway
+              ));
+              break;
+
+            // ===== Diagonal drift effects (smooth corner-to-corner movement) =====
+            case 'driftTopLeft':
+              // Drift towards top-left with zoom
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)+0.08*iw*(1-${easeInOut})`,  // Move left
+                `ih/2-(ih/zoom/2)+0.06*ih*(1-${easeInOut})`,  // Move up
+              ));
+              break;
+
+            case 'driftTopRight':
+              // Drift towards top-right with zoom
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)-0.08*iw*(1-${easeInOut})`,
+                `ih/2-(ih/zoom/2)+0.06*ih*(1-${easeInOut})`,
+              ));
+              break;
+
+            case 'driftBottomLeft':
+              // Drift towards bottom-left with zoom
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)+0.08*iw*(1-${easeInOut})`,
+                `ih/2-(ih/zoom/2)-0.06*ih*(1-${easeInOut})`,
+              ));
+              break;
+
+            case 'driftBottomRight':
+              // Drift towards bottom-right with zoom
+              filters.push(buildZoompanFilter(
+                `1+0.3*${easeOut}`,
+                `iw/2-(iw/zoom/2)-0.08*iw*(1-${easeInOut})`,
+                `ih/2-(ih/zoom/2)-0.06*ih*(1-${easeInOut})`,
+              ));
+              break;
+
             // ===== No effect =====
             case 'none':
             default:

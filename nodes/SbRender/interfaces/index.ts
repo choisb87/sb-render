@@ -25,7 +25,18 @@ export type KenBurnsEffect =
   | 'panLeft'
   | 'panRight'
   | 'panUp'
-  | 'panDown';
+  | 'panDown'
+  // Parallax effects (zoom + pan with depth illusion)
+  | 'parallaxLeft'
+  | 'parallaxRight'
+  | 'parallaxUp'
+  | 'parallaxDown'
+  | 'parallaxZoom'
+  // Diagonal movements
+  | 'driftTopLeft'
+  | 'driftTopRight'
+  | 'driftBottomLeft'
+  | 'driftBottomRight';
 
 // ============================================================================
 // Main Node Parameters

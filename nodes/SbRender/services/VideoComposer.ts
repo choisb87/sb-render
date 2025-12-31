@@ -1,8 +1,6 @@
-import { promises as fs, appendFileSync, existsSync } from 'fs';
+import { promises as fs, appendFileSync } from 'fs';
 import { dirname, join } from 'path';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
+import { createCommand, ffprobe, getFfmpegPath, getFfprobePath } from '../utils/ffmpeg-wrapper';
 import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams, KenBurnsEffect } from '../interfaces';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
@@ -17,101 +15,10 @@ function debugLog(message: string): void {
   }
 }
 
-// Helper function to find binary in multiple locations
-function findBinary(primaryPath: string | null, binaryName: string): string | null {
-  // Check primary path from package
-  if (primaryPath && existsSync(primaryPath)) {
-    return primaryPath;
-  }
-
-  // Search in common n8n locations (hoisted node_modules)
-  const searchPaths = [
-    // n8n custom nodes location
-    '/home/node/.n8n/node_modules/ffmpeg-static/ffmpeg',
-    '/home/node/.n8n/node_modules/ffprobe-static/bin/linux/x64/ffprobe',
-    // n8n nodes location
-    '/home/node/.n8n/nodes/node_modules/ffmpeg-static/ffmpeg',
-    '/home/node/.n8n/nodes/node_modules/ffprobe-static/bin/linux/x64/ffprobe',
-    // Relative to this module
-    join(__dirname, '..', '..', '..', 'node_modules', 'ffmpeg-static', 'ffmpeg'),
-    join(__dirname, '..', '..', '..', 'node_modules', 'ffprobe-static', 'bin', 'linux', 'x64', 'ffprobe'),
-    // Go up more levels for hoisted packages
-    join(__dirname, '..', '..', '..', '..', 'node_modules', 'ffmpeg-static', 'ffmpeg'),
-    join(__dirname, '..', '..', '..', '..', 'node_modules', 'ffprobe-static', 'bin', 'linux', 'x64', 'ffprobe'),
-    join(__dirname, '..', '..', '..', '..', '..', 'node_modules', 'ffmpeg-static', 'ffmpeg'),
-    join(__dirname, '..', '..', '..', '..', '..', 'node_modules', 'ffprobe-static', 'bin', 'linux', 'x64', 'ffprobe'),
-  ];
-
-  for (const searchPath of searchPaths) {
-    if (searchPath.includes(binaryName) && existsSync(searchPath)) {
-      console.log(`[VideoComposer] Found ${binaryName} at: ${searchPath}`);
-      debugLog(`[VideoComposer] Found ${binaryName} at: ${searchPath}`);
-      return searchPath;
-    }
-  }
-
-  return null;
-}
-
-// Set FFmpeg and FFprobe paths with validation
-try {
-  // ffmpeg-static exports path directly, ffprobe-static exports { path }
-  const ffmpegBinPath = findBinary(ffmpegPath as string, 'ffmpeg');
-  const ffprobeBinPath = findBinary(ffprobeStatic.path, 'ffprobe');
-
-  // Validate that binaries actually exist (critical for n8n environment)
-  if (!ffmpegBinPath) {
-    console.error(`[VideoComposer] FFmpeg binary not found in any location`);
-    debugLog(`[VideoComposer] FFmpeg binary missing from all locations`);
-
-    // Try system ffmpeg as fallback
-    try {
-      ffmpeg.setFfmpegPath('ffmpeg');
-      console.warn('[VideoComposer] Using system ffmpeg as fallback');
-      debugLog('[VideoComposer] Using system ffmpeg as fallback');
-    } catch (systemError) {
-      throw new Error(`FFmpeg binary not found and system ffmpeg unavailable`);
-    }
-  } else {
-    ffmpeg.setFfmpegPath(ffmpegBinPath);
-    console.log(`[VideoComposer] ✅ FFmpeg verified: ${ffmpegBinPath}`);
-    debugLog(`[VideoComposer] FFmpeg path set and verified: ${ffmpegBinPath}`);
-  }
-
-  if (!ffprobeBinPath) {
-    console.error(`[VideoComposer] FFprobe binary not found in any location`);
-    debugLog(`[VideoComposer] FFprobe binary missing from all locations`);
-
-    // Try system ffprobe as fallback
-    try {
-      ffmpeg.setFfprobePath('ffprobe');
-      console.warn('[VideoComposer] Using system ffprobe as fallback');
-      debugLog('[VideoComposer] Using system ffprobe as fallback');
-    } catch (systemError) {
-      console.warn('[VideoComposer] System ffprobe also unavailable, metadata detection will be limited');
-      debugLog('[VideoComposer] System ffprobe unavailable, will use fallback metadata');
-      // Don't throw - we'll handle this gracefully in getVideoMetadata
-    }
-  } else {
-    ffmpeg.setFfprobePath(ffprobeBinPath);
-    console.log(`[VideoComposer] ✅ FFprobe verified: ${ffprobeBinPath}`);
-    debugLog(`[VideoComposer] FFprobe path set and verified: ${ffprobeBinPath}`);
-  }
-} catch (error) {
-  console.error('[VideoComposer] CRITICAL: Failed to initialize FFmpeg/FFprobe:', error);
-  debugLog(`[VideoComposer] Initialization error: ${error}`);
-
-  // Final fallback: try system binaries
-  try {
-    ffmpeg.setFfmpegPath('ffmpeg');
-    ffmpeg.setFfprobePath('ffprobe');
-    console.warn('[VideoComposer] Using system ffmpeg/ffprobe binaries as last resort');
-    debugLog('[VideoComposer] Using system binaries as last resort');
-  } catch (systemError) {
-    console.error('[VideoComposer] No FFmpeg/FFprobe available - operations will be limited');
-    debugLog('[VideoComposer] No FFmpeg available - critical error');
-  }
-}
+// Log FFmpeg paths on initialization
+console.log(`[VideoComposer] ✅ FFmpeg path: ${getFfmpegPath()}`);
+console.log(`[VideoComposer] ✅ FFprobe path: ${getFfprobePath()}`);
+debugLog(`[VideoComposer] FFmpeg: ${getFfmpegPath()}, FFprobe: ${getFfprobePath()}`)
 
 /**
  * VideoComposer Service
@@ -130,7 +37,7 @@ export class VideoComposer implements IVideoComposer {
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
-        const command = ffmpeg(videoPath);
+        const command = createCommand(videoPath);
 
         // Add audio inputs if present
         if (audioPath) {
@@ -307,7 +214,7 @@ export class VideoComposer implements IVideoComposer {
 
     return new Promise((resolve, reject) => {
       try {
-        const command = ffmpeg(videoPath);
+        const command = createCommand(videoPath);
 
         // Add BGM input with simple approach
         if (bgmPath) {
@@ -543,7 +450,7 @@ export class VideoComposer implements IVideoComposer {
       console.log(`[FallbackDuration] Attempting direct ffprobe on: ${videoPath}`);
       
       // Try with a simpler ffprobe call
-      ffmpeg.ffprobe(videoPath, [
+      ffprobe(videoPath, [
         '-v', 'quiet',
         '-show_entries', 'format=duration',
         '-of', 'csv=p=0'
@@ -566,9 +473,9 @@ export class VideoComposer implements IVideoComposer {
    */
   async getAudioDuration(audioPath: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(audioPath, (error, metadata) => {
-        if (error) {
-          reject(new Error(`Failed to get audio duration: ${error.message}`));
+      ffprobe(audioPath, (error, metadata) => {
+        if (error || !metadata) {
+          reject(new Error(`Failed to get audio duration: ${error?.message || 'No metadata'}`));
           return;
         }
 
@@ -588,25 +495,14 @@ export class VideoComposer implements IVideoComposer {
       // Also write to file for n8n debugging
       debugLog(`${logMsg}`);
 
-      // Try to use ffprobe
-      // Ensure path is set in case n8n environment is different
-      try {
-        ffmpeg.setFfprobePath(ffprobeStatic.path);
-        debugLog(`[Metadata] FFprobe path reconfirmed: ${ffprobeStatic.path}`);
-      } catch (e) {
-        console.warn('[Metadata] Could not set ffprobe path:', e);
-        debugLog(`[Metadata] FFprobe path setting failed: ${e}`);
-      }
-
-      ffmpeg.ffprobe(videoPath, (error, metadata) => {
-        if (error) {
+      ffprobe(videoPath, (error, metadata) => {
+        if (error || !metadata) {
           // CRITICAL: If ffprobe fails in n8n, it's likely a path/permission issue
           // NOT that the video lacks audio. Safer to assume audio EXISTS.
           console.error('[Metadata] ❌ ffprobe failed for:', videoPath);
-          console.error('[Metadata] Error:', error.message);
-          console.error('[Metadata] Error code:', error.code || 'unknown');
+          console.error('[Metadata] Error:', error?.message || 'No metadata');
           debugLog(`[Metadata] ❌ FFPROBE FAILED: ${videoPath}`);
-          debugLog(`[Metadata] Error: ${error.message}`);
+          debugLog(`[Metadata] Error: ${error?.message || 'No metadata'}`);
           debugLog(`[Metadata] Assuming audio EXISTS to prevent loss`);
 
           // CHANGED: Assume audio EXISTS when probe fails
@@ -758,7 +654,7 @@ export class VideoComposer implements IVideoComposer {
 
     return new Promise((resolve, reject) => {
       try {
-        const command = ffmpeg();
+        const command = createCommand();
 
         // Add all video inputs
         videoPaths.forEach(videoPath => {
@@ -918,7 +814,7 @@ export class VideoComposer implements IVideoComposer {
 
     return new Promise((resolve, reject) => {
       try {
-        const command = ffmpeg();
+        const command = createCommand();
         const FPS = 24;
 
         // Helper to check if effect uses zoompan (all effects except 'none')

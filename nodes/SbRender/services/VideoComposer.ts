@@ -958,6 +958,9 @@ export class VideoComposer implements IVideoComposer {
           const effect = effects[index];
           const frames = Math.ceil(duration * FPS);
 
+          // Debug logging
+          console.log(`[ImageToVideo] Image ${index}: effect='${effect}', duration=${duration}s, frames=${frames}`);
+
           // Helper to build zoompan filter string
           const buildZoompanFilter = (
             zoomExpr: string,
@@ -1121,6 +1124,7 @@ export class VideoComposer implements IVideoComposer {
         const filterString = `${scaleFilters};${concatInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
 
         console.log(`[ImageToVideo] Ken Burns effects: ${effects.join(', ')}`);
+        console.log(`[ImageToVideo] Generated filter: ${filterString.substring(0, 200)}...`);
         debugLog(`[ImageToVideo] Filter: ${filterString}`);
 
         // Apply complex filter

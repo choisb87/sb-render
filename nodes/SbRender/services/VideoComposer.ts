@@ -3,7 +3,7 @@ import { dirname, join } from 'path';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
-import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams } from '../interfaces';
+import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams, KenBurnsEffect } from '../interfaces';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
 const DEBUG_MODE = process.env.SB_RENDER_DEBUG === 'true';
@@ -894,7 +894,7 @@ export class VideoComposer implements IVideoComposer {
 
   /**
    * Create video from multiple images with specified durations
-   * @param kenBurnsEffects - Optional array of Ken Burns effects for each image ('none' | 'zoomIn' | 'zoomOut')
+   * @param kenBurnsEffects - Optional array of Ken Burns effects for each image
    */
   async createVideoFromImages(
     imagePaths: string[],
@@ -904,14 +904,14 @@ export class VideoComposer implements IVideoComposer {
     quality = 'high',
     customCRF?: number,
     outputFormat = 'mp4',
-    kenBurnsEffects?: ('none' | 'zoomIn' | 'zoomOut')[],
+    kenBurnsEffects?: KenBurnsEffect[],
   ): Promise<Buffer> {
     if (imagePaths.length !== durations.length) {
       throw new Error('Number of images must match number of durations');
     }
 
     // Default to 'none' for all images if not provided
-    const effects = kenBurnsEffects || imagePaths.map(() => 'none');
+    const effects: KenBurnsEffect[] = kenBurnsEffects || imagePaths.map(() => 'none');
     if (effects.length !== imagePaths.length) {
       throw new Error('Number of Ken Burns effects must match number of images');
     }
@@ -921,15 +921,17 @@ export class VideoComposer implements IVideoComposer {
         const command = ffmpeg();
         const FPS = 24;
 
+        // Helper to check if effect uses zoompan (all effects except 'none')
+        const isZoompanEffect = (effect: KenBurnsEffect): boolean => effect !== 'none';
+
         // Add all images as inputs with loop
-        // For Ken Burns effects, we don't use -t on input because zoompan's d parameter controls duration
-        // For non-Ken Burns, we use -t to control input duration
+        // For zoompan effects, we use single frame input; zoompan's d parameter controls duration
+        // For 'none', we use -t to control input duration
         imagePaths.forEach((imagePath, index) => {
           const effect = effects[index];
-          const hasKenBurns = effect === 'zoomIn' || effect === 'zoomOut';
 
-          if (hasKenBurns) {
-            // For Ken Burns: use -framerate 1 to get single frame, zoompan d= controls output frames
+          if (isZoompanEffect(effect)) {
+            // For zoompan effects: use -framerate 1 to get single frame
             command
               .input(imagePath)
               .inputOptions([
@@ -938,7 +940,7 @@ export class VideoComposer implements IVideoComposer {
                 '-t 1',          // Just 1 second of input (1 frame at 1fps)
               ]);
           } else {
-            // For non-Ken Burns: standard loop with duration
+            // For 'none': standard loop with duration
             command
               .input(imagePath)
               .inputOptions([
@@ -956,31 +958,161 @@ export class VideoComposer implements IVideoComposer {
           const effect = effects[index];
           const frames = Math.ceil(duration * FPS);
 
-          if (effect === 'zoomIn') {
-            // Ken Burns Zoom In: 1.0 → 1.2 scale, centered
-            // zoompan outputs at target size, so we need to start larger and use zoom
-            filters.push(
+          // Helper to build zoompan filter string
+          const buildZoompanFilter = (
+            zoomExpr: string,
+            xExpr: string,
+            yExpr: string,
+          ): string => {
+            return (
               `[${index}:v]scale=8000:-1,` +
-              `zoompan=z='1+0.2*on/${frames}':` +
-              `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+              `zoompan=z='${zoomExpr}':` +
+              `x='${xExpr}':y='${yExpr}':` +
               `d=${frames}:s=1920x1080:fps=${FPS},` +
               `setsar=1[v${index}]`
             );
-          } else if (effect === 'zoomOut') {
-            // Ken Burns Zoom Out: 1.2 → 1.0 scale, centered
-            filters.push(
-              `[${index}:v]scale=8000:-1,` +
-              `zoompan=z='1.2-0.2*on/${frames}':` +
-              `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-              `d=${frames}:s=1920x1080:fps=${FPS},` +
-              `setsar=1[v${index}]`
-            );
-          } else {
-            // No effect - standard scale with padding
-            filters.push(
-              `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,` +
-              `pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${FPS}[v${index}]`
-            );
+          };
+
+          switch (effect) {
+            // ===== Standard zoom (centered, medium speed: 20% zoom) =====
+            case 'zoomIn':
+              // 1.0 → 1.2 scale, centered
+              filters.push(buildZoompanFilter(
+                `1+0.2*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'zoomOut':
+              // 1.2 → 1.0 scale, centered
+              filters.push(buildZoompanFilter(
+                `1.2-0.2*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            // ===== Speed variations (centered) =====
+            case 'zoomInSlow':
+              // 1.0 → 1.1 scale (subtle, 10% zoom)
+              filters.push(buildZoompanFilter(
+                `1+0.1*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'zoomInFast':
+              // 1.0 → 1.4 scale (dramatic, 40% zoom)
+              filters.push(buildZoompanFilter(
+                `1+0.4*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'zoomOutSlow':
+              // 1.1 → 1.0 scale (subtle)
+              filters.push(buildZoompanFilter(
+                `1.1-0.1*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'zoomOutFast':
+              // 1.4 → 1.0 scale (dramatic)
+              filters.push(buildZoompanFilter(
+                `1.4-0.4*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            // ===== Position variations (zoom into specific area) =====
+            case 'zoomInLeft':
+              // Zoom into left third of image
+              filters.push(buildZoompanFilter(
+                `1+0.3*on/${frames}`,
+                'iw/4-(iw/zoom/2)',  // Left side
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'zoomInRight':
+              // Zoom into right third of image
+              filters.push(buildZoompanFilter(
+                `1+0.3*on/${frames}`,
+                '3*iw/4-(iw/zoom/2)',  // Right side
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'zoomInTop':
+              // Zoom into top third of image
+              filters.push(buildZoompanFilter(
+                `1+0.3*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                'ih/4-(ih/zoom/2)',  // Top
+              ));
+              break;
+
+            case 'zoomInBottom':
+              // Zoom into bottom third of image
+              filters.push(buildZoompanFilter(
+                `1+0.3*on/${frames}`,
+                'iw/2-(iw/zoom/2)',
+                '3*ih/4-(ih/zoom/2)',  // Bottom
+              ));
+              break;
+
+            // ===== Pan effects (no zoom, just movement) =====
+            case 'panLeft':
+              // Pan from right to left (fixed zoom at 1.3x for movement range)
+              filters.push(buildZoompanFilter(
+                '1.3',
+                `iw/2-(iw/zoom/2)+0.15*iw*(1-on/${frames})`,  // Start right, move left
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'panRight':
+              // Pan from left to right
+              filters.push(buildZoompanFilter(
+                '1.3',
+                `iw/2-(iw/zoom/2)-0.15*iw*(1-on/${frames})`,  // Start left, move right
+                'ih/2-(ih/zoom/2)',
+              ));
+              break;
+
+            case 'panUp':
+              // Pan from bottom to top
+              filters.push(buildZoompanFilter(
+                '1.3',
+                'iw/2-(iw/zoom/2)',
+                `ih/2-(ih/zoom/2)+0.15*ih*(1-on/${frames})`,  // Start bottom, move up
+              ));
+              break;
+
+            case 'panDown':
+              // Pan from top to bottom
+              filters.push(buildZoompanFilter(
+                '1.3',
+                'iw/2-(iw/zoom/2)',
+                `ih/2-(ih/zoom/2)-0.15*ih*(1-on/${frames})`,  // Start top, move down
+              ));
+              break;
+
+            // ===== No effect =====
+            case 'none':
+            default:
+              // Standard scale with padding, no zoompan
+              filters.push(
+                `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,` +
+                `pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${FPS}[v${index}]`
+              );
+              break;
           }
         });
 

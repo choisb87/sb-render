@@ -3,6 +3,31 @@
  */
 
 // ============================================================================
+// Ken Burns Effect Types
+// ============================================================================
+
+export type KenBurnsEffect =
+  | 'none'
+  // Standard zoom (centered, medium speed)
+  | 'zoomIn'
+  | 'zoomOut'
+  // Speed variations (centered)
+  | 'zoomInSlow'
+  | 'zoomInFast'
+  | 'zoomOutSlow'
+  | 'zoomOutFast'
+  // Position variations (zoom into specific area)
+  | 'zoomInLeft'
+  | 'zoomInRight'
+  | 'zoomInTop'
+  | 'zoomInBottom'
+  // Pan effects (no zoom, just movement)
+  | 'panLeft'
+  | 'panRight'
+  | 'panUp'
+  | 'panDown';
+
+// ============================================================================
 // Main Node Parameters
 // ============================================================================
 

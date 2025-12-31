@@ -21,6 +21,7 @@ import type {
   IAudioMixConfig,
   ISubtitleConfig,
   IVideoMetadata,
+  KenBurnsEffect,
 } from './interfaces';
 
 import { DEFAULTS as DEFAULT_VALUES } from './interfaces';
@@ -1158,16 +1159,78 @@ export class SbRender implements INodeType {
                     value: 'none',
                   },
                   {
+                    name: 'Pan Down',
+                    value: 'panDown',
+                    description: 'Pan from top to bottom',
+                  },
+                  {
+                    name: 'Pan Left',
+                    value: 'panLeft',
+                    description: 'Pan from right to left',
+                  },
+                  {
+                    name: 'Pan Right',
+                    value: 'panRight',
+                    description: 'Pan from left to right',
+                  },
+                  {
+                    name: 'Pan Up',
+                    value: 'panUp',
+                    description: 'Pan from bottom to top',
+                  },
+                  {
                     name: 'Zoom In',
                     value: 'zoomIn',
+                    description: 'Slowly zoom in to center (20% zoom)',
+                  },
+                  {
+                    name: 'Zoom In (Fast)',
+                    value: 'zoomInFast',
+                    description: 'Dramatic zoom in (40% zoom)',
+                  },
+                  {
+                    name: 'Zoom In (Slow)',
+                    value: 'zoomInSlow',
+                    description: 'Subtle zoom in (10% zoom)',
+                  },
+                  {
+                    name: 'Zoom In Bottom',
+                    value: 'zoomInBottom',
+                    description: 'Zoom in towards the bottom',
+                  },
+                  {
+                    name: 'Zoom In Left',
+                    value: 'zoomInLeft',
+                    description: 'Zoom in towards the left side',
+                  },
+                  {
+                    name: 'Zoom In Right',
+                    value: 'zoomInRight',
+                    description: 'Zoom in towards the right side',
+                  },
+                  {
+                    name: 'Zoom In Top',
+                    value: 'zoomInTop',
+                    description: 'Zoom in towards the top',
                   },
                   {
                     name: 'Zoom Out',
                     value: 'zoomOut',
+                    description: 'Slowly zoom out from center (20% zoom)',
+                  },
+                  {
+                    name: 'Zoom Out (Fast)',
+                    value: 'zoomOutFast',
+                    description: 'Dramatic zoom out (40% zoom)',
+                  },
+                  {
+                    name: 'Zoom Out (Slow)',
+                    value: 'zoomOutSlow',
+                    description: 'Subtle zoom out (10% zoom)',
                   },
                 ],
                 default: 'none',
-                description: 'Apply Ken Burns zoom effect to make the image look more cinematic',
+                description: 'Apply Ken Burns zoom/pan effect to make the image look more cinematic',
               },
             ],
           },
@@ -1987,7 +2050,7 @@ export class SbRender implements INodeType {
             returnData.push(result);
           } else if (operation === 'Merge') {
             // Get merge parameters (support both old videoUrls and new mediaItems format)
-            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: 'none' | 'zoomIn' | 'zoomOut' }> };
+            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: KenBurnsEffect }> };
             let mediaItems = mediaItemsParam.items || [];
 
             // Backward compatibility: check for old videoUrls parameter
@@ -2180,7 +2243,7 @@ export class SbRender implements INodeType {
             console.log(`[SB Render] ReturnData length: ${returnData.length}`);
           } else if (operation === 'ImageToVideo') {
             // Get ImageToVideo parameters
-            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: 'none' | 'zoomIn' | 'zoomOut' }> };
+            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: KenBurnsEffect }> };
             const imageValues = imagesParam.imageValues || [];
             const outputFilename = this.getNodeParameter('imageToVideoOutputFilename', itemIndex, 'images-video.mp4') as string;
             const imageToVideoOutputFormat = this.getNodeParameter('imageToVideoOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
@@ -2199,7 +2262,7 @@ export class SbRender implements INodeType {
             console.log('[SB Render] Downloading images...');
             const imagePaths: string[] = [];
             const durations: number[] = [];
-            const kenBurnsEffects: ('none' | 'zoomIn' | 'zoomOut')[] = [];
+            const kenBurnsEffects: KenBurnsEffect[] = [];
 
             for (let i = 0; i < imageValues.length; i++) {
               const imageValue = imageValues[i];

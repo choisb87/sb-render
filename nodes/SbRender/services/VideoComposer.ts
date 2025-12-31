@@ -1,7 +1,8 @@
 import { promises as fs, appendFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { createCommand, ffprobe, getFfmpegPath, getFfprobePath } from '../utils/ffmpeg-wrapper';
-import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams, KenBurnsConfig, ZoomDirection, MotionSpeed } from '../interfaces';
+import type { IVideoComposer, IVideoMetadata, ISbRenderNodeParams, KenBurnsConfig, ZoomDirection, MotionSpeed, ParallaxConfig } from '../interfaces';
+import { parallaxEngine } from './ParallaxEngine';
 
 // Debug mode: set SB_RENDER_DEBUG=true to enable file-based debug logging
 const DEBUG_MODE = process.env.SB_RENDER_DEBUG === 'true';
@@ -813,21 +814,68 @@ export class VideoComposer implements IVideoComposer {
       throw new Error('Number of Ken Burns configs must match number of images');
     }
 
+    const FPS = 24;
+    const parallaxVideoPaths: string[] = []; // Track generated parallax videos for cleanup
+
+    // Helper functions
+    const isZoompanEffect = (config: KenBurnsConfig): boolean =>
+      config.motion !== 'none' && config.motion !== 'parallax';
+
+    const isParallaxEffect = (config: KenBurnsConfig): boolean => config.motion === 'parallax';
+
+    // Pre-process parallax images to generate video clips
+    const processedPaths = [...imagePaths];
+    const processedTypes: ('image' | 'video')[] = imagePaths.map(() => 'image');
+
+    for (let i = 0; i < configs.length; i++) {
+      if (isParallaxEffect(configs[i])) {
+        console.log(`[ImageToVideo] Processing parallax effect for image ${i}`);
+        const config = configs[i];
+        const parallaxConfig: ParallaxConfig = {
+          direction: config.parallaxDirection || 'left',
+          intensity: config.parallaxIntensity || 'normal',
+          layerCount: 3,
+        };
+
+        try {
+          // Generate parallax video
+          const parallaxOutputPath = join(dirname(outputPath), `parallax_${Date.now()}_${i}.mp4`);
+          await parallaxEngine.generateParallaxVideo(
+            imagePaths[i],
+            parallaxOutputPath,
+            parallaxConfig,
+            durations[i],
+            FPS,
+            videoCodec,
+            quality,
+            customCRF,
+          );
+
+          processedPaths[i] = parallaxOutputPath;
+          processedTypes[i] = 'video';
+          parallaxVideoPaths.push(parallaxOutputPath);
+          console.log(`[ImageToVideo] Parallax video generated: ${parallaxOutputPath}`);
+        } catch (error) {
+          console.error(`[ImageToVideo] Parallax generation failed for image ${i}, falling back to static:`, error);
+          // Keep original image path on failure
+        }
+      }
+    }
+
     return new Promise((resolve, reject) => {
       try {
         const command = createCommand();
-        const FPS = 24;
 
-        // Helper to check if config uses zoompan (all motions except 'none')
-        const isZoompanEffect = (config: KenBurnsConfig): boolean => config.motion !== 'none';
-
-        // Add all images as inputs with loop
-        imagePaths.forEach((imagePath, index) => {
+        // Add all inputs (images or parallax videos)
+        processedPaths.forEach((mediaPath, index) => {
           const config = configs[index];
 
-          if (isZoompanEffect(config)) {
+          if (processedTypes[index] === 'video') {
+            // Parallax video - add as video input
+            command.input(mediaPath);
+          } else if (isZoompanEffect(config)) {
             command
-              .input(imagePath)
+              .input(mediaPath)
               .inputOptions([
                 '-loop 1',
                 '-framerate 1',
@@ -835,7 +883,7 @@ export class VideoComposer implements IVideoComposer {
               ]);
           } else {
             command
-              .input(imagePath)
+              .input(mediaPath)
               .inputOptions([
                 '-loop 1',
                 `-t ${durations[index]}`,
@@ -843,10 +891,10 @@ export class VideoComposer implements IVideoComposer {
           }
         });
 
-        // Build filter for each image based on Ken Burns config
+        // Build filter for each media based on Ken Burns config
         const filters: string[] = [];
 
-        imagePaths.forEach((_, index) => {
+        processedPaths.forEach((_, index) => {
           const duration = durations[index];
           const config = configs[index];
           const frames = Math.ceil(duration * FPS);
@@ -957,6 +1005,14 @@ export class VideoComposer implements IVideoComposer {
               ));
               break;
 
+            case 'parallax':
+              // Parallax videos are pre-generated, just scale and normalize
+              filters.push(
+                `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,` +
+                `pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${FPS}[v${index}]`
+              );
+              break;
+
             case 'none':
             default:
               filters.push(
@@ -968,8 +1024,8 @@ export class VideoComposer implements IVideoComposer {
         });
 
         const scaleFilters = filters.join(';');
-        const concatInputs = imagePaths.map((_, index) => `[v${index}]`).join('');
-        const filterString = `${scaleFilters};${concatInputs}concat=n=${imagePaths.length}:v=1:a=0[outv]`;
+        const concatInputs = processedPaths.map((_, index) => `[v${index}]`).join('');
+        const filterString = `${scaleFilters};${concatInputs}concat=n=${processedPaths.length}:v=1:a=0[outv]`;
 
         console.log(`[ImageToVideo] Ken Burns configs: ${configs.map(c => c.motion).join(', ')}`);
         console.log(`[ImageToVideo] Generated filter: ${filterString.substring(0, 200)}...`);
@@ -1000,17 +1056,32 @@ export class VideoComposer implements IVideoComposer {
           }
         });
 
+        // Cleanup function for parallax temp files
+        const cleanupParallaxFiles = async () => {
+          for (const tempPath of parallaxVideoPaths) {
+            try {
+              await fs.unlink(tempPath);
+              console.log(`[ImageToVideo] Cleaned up parallax temp: ${tempPath}`);
+            } catch (e) {
+              // Ignore cleanup errors
+            }
+          }
+        };
+
         // Handle completion
         command.on('end', async () => {
           try {
             const buffer = await fs.readFile(outputPath);
+            await cleanupParallaxFiles();
             resolve(buffer);
           } catch (error) {
+            await cleanupParallaxFiles();
             reject(new Error(`Failed to read output file: ${error}`));
           }
         });
 
-        command.on('error', (error: Error) => {
+        command.on('error', async (error: Error) => {
+          await cleanupParallaxFiles();
           reject(new Error(`FFmpeg image to video error: ${error.message}`));
         });
 

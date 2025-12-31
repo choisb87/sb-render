@@ -6,15 +6,27 @@
 // Ken Burns Effect Types
 // ============================================================================
 
-export type KenBurnsMotion = 'none' | 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight' | 'panUp' | 'panDown';
+export type KenBurnsMotion = 'none' | 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight' | 'panUp' | 'panDown' | 'parallax';
 export type ZoomDirection = 'center' | 'left' | 'right' | 'top' | 'bottom';
 export type MotionSpeed = 'slow' | 'normal' | 'fast';
+export type ParallaxDirection = 'left' | 'right' | 'up' | 'down' | 'zoomIn' | 'zoomOut';
+export type ParallaxIntensity = 'subtle' | 'normal' | 'dramatic';
 
 // Combined effect configuration
 export interface KenBurnsConfig {
   motion: KenBurnsMotion;
   direction?: ZoomDirection;
   speed?: MotionSpeed;
+  // Parallax-specific options (when motion === 'parallax')
+  parallaxDirection?: ParallaxDirection;
+  parallaxIntensity?: ParallaxIntensity;
+}
+
+// Parallax configuration (for OpenCV-based depth parallax)
+export interface ParallaxConfig {
+  direction: ParallaxDirection;
+  intensity: ParallaxIntensity;
+  layerCount?: number; // Number of depth layers (2-5), default 3
 }
 
 // Legacy type for backward compatibility

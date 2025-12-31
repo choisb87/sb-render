@@ -25,6 +25,8 @@ import type {
   KenBurnsMotion,
   ZoomDirection,
   MotionSpeed,
+  ParallaxDirection,
+  ParallaxIntensity,
 } from './interfaces';
 
 import { DEFAULTS as DEFAULT_VALUES } from './interfaces';
@@ -895,74 +897,120 @@ export class SbRender implements INodeType {
             name: 'items',
             displayName: 'Items',
             values: [
-              {
-                displayName: 'Type',
-                name: 'type',
-                type: 'options',
-                options: [
-                  {
-                    name: 'Video',
-                    value: 'video',
-                  },
-                  {
-                    name: 'Image',
-                    value: 'image',
-                  },
-                ],
-                default: 'video',
-                description: 'Type of media (video or image)',
-              },
-              {
-                displayName: 'URL',
-                name: 'url',
-                type: 'string',
-                default: '',
-                placeholder: 'https://example.com/media.mp4',
-                required: true,
-                description: 'URL of the video or image',
-              },
-              {
-                displayName: 'Duration (Seconds)',
-                name: 'duration',
-                type: 'number',
-                displayOptions: {
-                  show: {
-                    type: ['image'],
-                  },
-                },
-                typeOptions: {
-                  minValue: 0.1,
-                },
-                default: 3,
-                description: 'Duration in seconds (only for images)',
-              },
-              {
-                displayName: 'Ken Burns Effect',
-                name: 'kenBurnsEffect',
-                type: 'options',
-                displayOptions: {
-                  show: {
-                    type: ['image'],
-                  },
-                },
-                options: [
-                  {
-                    name: 'None',
-                    value: 'none',
-                  },
-                  {
-                    name: 'Zoom In',
-                    value: 'zoomIn',
-                  },
-                  {
-                    name: 'Zoom Out',
-                    value: 'zoomOut',
-                  },
-                ],
-                default: 'none',
-                description: 'Apply Ken Burns zoom effect to make the image look more cinematic',
-              },
-            ],
+											{
+												displayName: 'Duration (Seconds)',
+												name: 'duration',
+												type: 'number',
+												default: 3,
+												description: 'Duration in seconds (only for images)',
+											},
+											{
+												displayName: 'Ken Burns Effect',
+												name: 'kenBurnsEffect',
+												type: 'options',
+												options: [
+													{
+														name: 'None',
+														value: 'none',
+													},
+													{
+														name: 'Parallax (3D Depth)',
+														value: 'parallax',
+														description: 'OpenCV-based 3D depth parallax effect',
+													},
+													{
+														name: 'Zoom In',
+														value: 'zoomIn',
+													},
+													{
+														name: 'Zoom Out',
+														value: 'zoomOut',
+													},
+												],
+												default: 'none',
+												description: 'Apply Ken Burns zoom effect to make the image look more cinematic',
+											},
+											{
+												displayName: 'Parallax Direction',
+												name: 'parallaxDirection',
+												type: 'options',
+												options: [
+													{
+														name: 'Down',
+														value: 'down',
+													},
+													{
+														name: 'Left',
+														value: 'left',
+													},
+													{
+														name: 'Right',
+														value: 'right',
+													},
+													{
+														name: 'Up',
+														value: 'up',
+													},
+													{
+														name: 'Zoom In',
+														value: 'zoomIn',
+													},
+													{
+														name: 'Zoom Out',
+														value: 'zoomOut',
+													},
+													],
+												default: 'left',
+												description: 'Direction of parallax movement',
+											},
+											{
+												displayName: 'Parallax Intensity',
+												name: 'parallaxIntensity',
+												type: 'options',
+												options: [
+													{
+														name: 'Dramatic',
+														value: 'dramatic',
+													},
+													{
+														name: 'Normal',
+														value: 'normal',
+													},
+													{
+														name: 'Subtle',
+														value: 'subtle',
+													},
+													],
+												default: 'normal',
+												description: 'Intensity of the parallax depth effect',
+											},
+											{
+												displayName: 'Type',
+												name: 'type',
+												type: 'options',
+												options: [
+													{
+														name: 'Video',
+														value: 'video',
+													},
+													{
+														name: 'Image',
+														value: 'image',
+													},
+													],
+												default: 'video',
+												description: 'Type of media (video or image)',
+											},
+											{
+												displayName: 'URL',
+												name: 'url',
+												type: 'string',
+												default: '',
+												placeholder: 'https://example.com/media.mp4',
+													required:	true,
+												description: 'URL of the video or image',
+											},
+									],
           },
         ],
       },
@@ -1200,6 +1248,11 @@ export class SbRender implements INodeType {
 														description: 'Pan from bottom to top',
 													},
 													{
+														name: 'Parallax (3D Depth)',
+														value: 'parallax',
+														description: 'OpenCV-based 3D depth parallax effect',
+													},
+													{
 														name: 'Zoom In',
 														value: 'zoomIn',
 														description: 'Zoom into the center',
@@ -1214,9 +1267,87 @@ export class SbRender implements INodeType {
 												description: 'Ken Burns motion effect',
 											},
 											{
+												displayName: 'Parallax Direction',
+												name: 'parallaxDirection',
+												type: 'options',
+												displayOptions: {
+													show: {
+														kenBurnsEffect: ['parallax'],
+													},
+												},
+												options: [
+													{
+														name: 'Down',
+														value: 'down',
+														description: 'Move down with depth',
+													},
+													{
+														name: 'Left',
+														value: 'left',
+														description: 'Move left with depth',
+													},
+													{
+														name: 'Right',
+														value: 'right',
+														description: 'Move right with depth',
+													},
+													{
+														name: 'Up',
+														value: 'up',
+														description: 'Move up with depth',
+													},
+													{
+														name: 'Zoom In',
+														value: 'zoomIn',
+														description: 'Zoom with depth layers',
+													},
+													{
+														name: 'Zoom Out',
+														value: 'zoomOut',
+														description: 'Zoom out with depth layers',
+													},
+												],
+												default: 'left',
+												description: 'Direction of parallax movement',
+											},
+											{
+												displayName: 'Parallax Intensity',
+												name: 'parallaxIntensity',
+												type: 'options',
+												displayOptions: {
+													show: {
+														kenBurnsEffect: ['parallax'],
+													},
+												},
+												options: [
+													{
+														name: 'Dramatic',
+														value: 'dramatic',
+														description: 'Strong 3D depth effect',
+													},
+													{
+														name: 'Normal',
+														value: 'normal',
+														description: 'Balanced depth effect',
+													},
+													{
+														name: 'Subtle',
+														value: 'subtle',
+														description: 'Gentle, understated effect',
+													},
+												],
+												default: 'normal',
+												description: 'Intensity of the parallax depth effect',
+											},
+											{
 												displayName: 'Zoom Direction',
 												name: 'zoomDirection',
 												type: 'options',
+												displayOptions: {
+													show: {
+														kenBurnsEffect: ['zoomIn', 'zoomOut'],
+													},
+												},
 												options: [
 													{
 														name: 'Bottom',
@@ -2060,7 +2191,7 @@ export class SbRender implements INodeType {
             returnData.push(result);
           } else if (operation === 'Merge') {
             // Get merge parameters (support both old videoUrls and new mediaItems format)
-            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: KenBurnsMotion; zoomDirection?: ZoomDirection; motionSpeed?: MotionSpeed }> };
+            const mediaItemsParam = this.getNodeParameter('mediaItems', itemIndex, {}) as { items?: Array<{ type: 'video' | 'image'; url: string; duration?: number; kenBurnsEffect?: KenBurnsMotion; zoomDirection?: ZoomDirection; motionSpeed?: MotionSpeed; parallaxDirection?: ParallaxDirection; parallaxIntensity?: ParallaxIntensity }> };
             let mediaItems = mediaItemsParam.items || [];
 
             // Backward compatibility: check for old videoUrls parameter
@@ -2123,7 +2254,15 @@ export class SbRender implements INodeType {
                 const motion = (item.kenBurnsEffect || 'none') as KenBurnsMotion;
                 const direction = (item.zoomDirection || 'center') as ZoomDirection;
                 const speed = (item.motionSpeed || 'normal') as MotionSpeed;
-                const kenBurnsConfig: KenBurnsConfig = { motion, direction, speed };
+                const parallaxDir = (item.parallaxDirection || 'left') as ParallaxDirection;
+                const parallaxInt = (item.parallaxIntensity || 'normal') as ParallaxIntensity;
+                const kenBurnsConfig: KenBurnsConfig = {
+                  motion,
+                  direction,
+                  speed,
+                  parallaxDirection: parallaxDir,
+                  parallaxIntensity: parallaxInt,
+                };
                 console.log(`[SB Render] Downloaded image to: ${imagePath}, duration: ${item.duration || 3}s, motion: ${motion}, direction: ${direction}, speed: ${speed}`);
 
                 // Create temporary video from image with Ken Burns effect
@@ -2256,7 +2395,7 @@ export class SbRender implements INodeType {
             console.log(`[SB Render] ReturnData length: ${returnData.length}`);
           } else if (operation === 'ImageToVideo') {
             // Get ImageToVideo parameters
-            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: KenBurnsMotion; zoomDirection?: ZoomDirection; motionSpeed?: MotionSpeed }> };
+            const imagesParam = this.getNodeParameter('images', itemIndex, {}) as { imageValues?: Array<{ url: string; duration: number; kenBurnsEffect?: KenBurnsMotion; zoomDirection?: ZoomDirection; motionSpeed?: MotionSpeed; parallaxDirection?: ParallaxDirection; parallaxIntensity?: ParallaxIntensity }> };
             const imageValues = imagesParam.imageValues || [];
             const outputFilename = this.getNodeParameter('imageToVideoOutputFilename', itemIndex, 'images-video.mp4') as string;
             const imageToVideoOutputFormat = this.getNodeParameter('imageToVideoOutputFormat', itemIndex, 'mp4') as 'mp4' | 'mov' | 'webm';
@@ -2282,7 +2421,15 @@ export class SbRender implements INodeType {
               const motion = (imageValue.kenBurnsEffect || 'none') as KenBurnsMotion;
               const direction = (imageValue.zoomDirection || 'center') as ZoomDirection;
               const speed = (imageValue.motionSpeed || 'normal') as MotionSpeed;
-              const config: KenBurnsConfig = { motion, direction, speed };
+              const parallaxDir = (imageValue.parallaxDirection || 'left') as ParallaxDirection;
+              const parallaxInt = (imageValue.parallaxIntensity || 'normal') as ParallaxIntensity;
+              const config: KenBurnsConfig = {
+                motion,
+                direction,
+                speed,
+                parallaxDirection: parallaxDir,
+                parallaxIntensity: parallaxInt,
+              };
 
               console.log(`[SB Render] Downloading image ${i + 1}/${imageValues.length}: ${imageValue.url}, motion: ${motion}, direction: ${direction}, speed: ${speed}`);
               const imagePath = await fileManager.downloadFile(imageValue.url);

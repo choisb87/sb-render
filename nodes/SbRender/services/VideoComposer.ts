@@ -976,134 +976,141 @@ export class VideoComposer implements IVideoComposer {
             );
           };
 
+          // Easing expressions for smooth, cinematic motion
+          // t = normalized time (0→1), using quadratic easing
+          const t = `(on/${frames})`;
+          const easeOut = `(1-(1-${t})*(1-${t}))`;           // Fast start, slow end
+          const easeIn = `(${t}*${t})`;                       // Slow start, fast end
+          const easeInOut = `if(lt(${t},0.5),2*${t}*${t},1-(-2*${t}+2)*(-2*${t}+2)/2)`; // S-curve
+
           switch (effect) {
-            // ===== Standard zoom (centered, medium speed: 20% zoom) =====
+            // ===== Standard zoom with smooth easing =====
             case 'zoomIn':
-              // 1.0 → 1.2 scale, centered
+              // Cinematic zoom in: ease-out (fast start → gentle stop)
               filters.push(buildZoompanFilter(
-                `1+0.2*on/${frames}`,
+                `1+0.25*${easeOut}`,
                 'iw/2-(iw/zoom/2)',
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'zoomOut':
-              // 1.2 → 1.0 scale, centered
+              // Cinematic zoom out: ease-in (gentle start → fast end)
               filters.push(buildZoompanFilter(
-                `1.2-0.2*on/${frames}`,
+                `1.25-0.25*${easeIn}`,
                 'iw/2-(iw/zoom/2)',
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
-            // ===== Speed variations (centered) =====
+            // ===== Speed variations with easing =====
             case 'zoomInSlow':
-              // 1.0 → 1.1 scale (subtle, 10% zoom)
+              // Subtle, gentle zoom with smooth deceleration
               filters.push(buildZoompanFilter(
-                `1+0.1*on/${frames}`,
+                `1+0.12*${easeOut}`,
                 'iw/2-(iw/zoom/2)',
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'zoomInFast':
-              // 1.0 → 1.4 scale (dramatic, 40% zoom)
+              // Dramatic zoom with strong easing
               filters.push(buildZoompanFilter(
-                `1+0.4*on/${frames}`,
+                `1+0.5*${easeOut}`,
                 'iw/2-(iw/zoom/2)',
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'zoomOutSlow':
-              // 1.1 → 1.0 scale (subtle)
+              // Gentle zoom out
               filters.push(buildZoompanFilter(
-                `1.1-0.1*on/${frames}`,
+                `1.12-0.12*${easeIn}`,
                 'iw/2-(iw/zoom/2)',
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'zoomOutFast':
-              // 1.4 → 1.0 scale (dramatic)
+              // Dramatic zoom out
               filters.push(buildZoompanFilter(
-                `1.4-0.4*on/${frames}`,
+                `1.5-0.5*${easeIn}`,
                 'iw/2-(iw/zoom/2)',
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
-            // ===== Position variations (zoom into specific area) =====
+            // ===== Position variations with zoom + subtle drift =====
             case 'zoomInLeft':
-              // Zoom into left third of image
+              // Zoom into left with subtle rightward drift (parallax feel)
               filters.push(buildZoompanFilter(
-                `1+0.3*on/${frames}`,
-                'iw/4-(iw/zoom/2)',  // Left side
+                `1+0.35*${easeOut}`,
+                `iw/3-(iw/zoom/2)+0.04*iw*${easeOut}`,
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'zoomInRight':
-              // Zoom into right third of image
+              // Zoom into right with subtle leftward drift
               filters.push(buildZoompanFilter(
-                `1+0.3*on/${frames}`,
-                '3*iw/4-(iw/zoom/2)',  // Right side
+                `1+0.35*${easeOut}`,
+                `2*iw/3-(iw/zoom/2)-0.04*iw*${easeOut}`,
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'zoomInTop':
-              // Zoom into top third of image
+              // Zoom into top with subtle downward drift
               filters.push(buildZoompanFilter(
-                `1+0.3*on/${frames}`,
+                `1+0.35*${easeOut}`,
                 'iw/2-(iw/zoom/2)',
-                'ih/4-(ih/zoom/2)',  // Top
+                `ih/3-(ih/zoom/2)+0.04*ih*${easeOut}`,
               ));
               break;
 
             case 'zoomInBottom':
-              // Zoom into bottom third of image
+              // Zoom into bottom with subtle upward drift
               filters.push(buildZoompanFilter(
-                `1+0.3*on/${frames}`,
+                `1+0.35*${easeOut}`,
                 'iw/2-(iw/zoom/2)',
-                '3*ih/4-(ih/zoom/2)',  // Bottom
+                `2*ih/3-(ih/zoom/2)-0.04*ih*${easeOut}`,
               ));
               break;
 
-            // ===== Pan effects (no zoom, just movement) =====
+            // ===== Pan effects with smooth S-curve easing =====
             case 'panLeft':
-              // Pan from right to left (fixed zoom at 1.3x for movement range)
+              // Smooth pan right→left with ease-in-out
               filters.push(buildZoompanFilter(
-                '1.3',
-                `iw/2-(iw/zoom/2)+0.15*iw*(1-on/${frames})`,  // Start right, move left
+                '1.2',
+                `iw/2-(iw/zoom/2)+0.1*iw*(1-${easeInOut})`,
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'panRight':
-              // Pan from left to right
+              // Smooth pan left→right with ease-in-out
               filters.push(buildZoompanFilter(
-                '1.3',
-                `iw/2-(iw/zoom/2)-0.15*iw*(1-on/${frames})`,  // Start left, move right
+                '1.2',
+                `iw/2-(iw/zoom/2)-0.1*iw*(1-${easeInOut})`,
                 'ih/2-(ih/zoom/2)',
               ));
               break;
 
             case 'panUp':
-              // Pan from bottom to top
+              // Smooth pan bottom→top with ease-in-out
               filters.push(buildZoompanFilter(
-                '1.3',
+                '1.2',
                 'iw/2-(iw/zoom/2)',
-                `ih/2-(ih/zoom/2)+0.15*ih*(1-on/${frames})`,  // Start bottom, move up
+                `ih/2-(ih/zoom/2)+0.1*ih*(1-${easeInOut})`,
               ));
               break;
 
             case 'panDown':
-              // Pan from top to bottom
+              // Smooth pan top→bottom with ease-in-out
               filters.push(buildZoompanFilter(
-                '1.3',
+                '1.2',
                 'iw/2-(iw/zoom/2)',
-                `ih/2-(ih/zoom/2)-0.15*ih*(1-on/${frames})`,  // Start top, move down
+                `ih/2-(ih/zoom/2)-0.1*ih*(1-${easeInOut})`,
               ));
               break;
 

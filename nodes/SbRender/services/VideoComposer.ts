@@ -921,14 +921,31 @@ export class VideoComposer implements IVideoComposer {
         const command = ffmpeg();
         const FPS = 24;
 
-        // Add all images as inputs with loop and duration
+        // Add all images as inputs with loop
+        // For Ken Burns effects, we don't use -t on input because zoompan's d parameter controls duration
+        // For non-Ken Burns, we use -t to control input duration
         imagePaths.forEach((imagePath, index) => {
-          command
-            .input(imagePath)
-            .inputOptions([
-              '-loop 1',
-              `-t ${durations[index]}`,
-            ]);
+          const effect = effects[index];
+          const hasKenBurns = effect === 'zoomIn' || effect === 'zoomOut';
+
+          if (hasKenBurns) {
+            // For Ken Burns: use -framerate 1 to get single frame, zoompan d= controls output frames
+            command
+              .input(imagePath)
+              .inputOptions([
+                '-loop 1',
+                '-framerate 1',  // 1 fps input - zoompan will generate the frames
+                '-t 1',          // Just 1 second of input (1 frame at 1fps)
+              ]);
+          } else {
+            // For non-Ken Burns: standard loop with duration
+            command
+              .input(imagePath)
+              .inputOptions([
+                '-loop 1',
+                `-t ${durations[index]}`,
+              ]);
+          }
         });
 
         // Build filter for each image based on Ken Burns effect

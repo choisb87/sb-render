@@ -2,13 +2,15 @@
  * ParallaxEngine - Creates 2.5D parallax effects from static images
  * Separates foreground/background layers and moves them at different speeds
  *
+ * Priority: ONNX (Node.js) > Python > Ken Burns (FFmpeg)
  * Uses sharp for layer separation and compositing
- * Falls back to simple Ken Burns if sharp is not available
+ * Falls back to simple Ken Burns if nothing else is available
  */
 import * as fs from 'fs';
 import * as path from 'path';
 import { createCommand, getFfprobePath } from '../utils/ffmpeg-wrapper';
 import { spawn, execSync } from 'child_process';
+import { generateParallaxONNX, isParallaxONNXAvailable } from './ParallaxGeneratorONNX';
 
 // Path to the depth parallax Python script
 // In compiled code, __dirname is dist/nodes/SbRender/services/
@@ -363,63 +365,49 @@ export class ParallaxEngine {
 
     console.log(`[ParallaxEngine] Output size: ${width}x${height}`);
 
-    // Check if Python depth estimation is available
-    const depthAvailable = await checkPythonDepth();
-
-    try {
-      if (depthAvailable) {
-        // Use AI depth-based parallax for true layer separation
-        console.log('[ParallaxEngine] Using AI depth-based parallax (Depth Anything V2)');
-        await generateDepthParallax(
-          imagePath,
-          outputPath,
-          config,
-          duration,
-          fps,
-        );
-      } else {
-        // Fall back to Ken Burns effect
-        console.log('[ParallaxEngine] Using Ken Burns effect (depth estimation not available)');
-        await generateSimpleKenBurns(
-          imagePath,
-          outputPath,
-          config,
-          duration,
-          fps,
-          width,
-          height,
-        );
-      }
-
-      const buffer = fs.readFileSync(outputPath);
-      console.log(`[ParallaxEngine] Video created: ${buffer.length} bytes`);
-      return buffer;
-
-    } catch (error) {
-      console.error('[ParallaxEngine] Error generating parallax:', error);
-
-      // If depth parallax failed, try Ken Burns as fallback
-      if (depthAvailable) {
-        console.log('[ParallaxEngine] Depth parallax failed, falling back to Ken Burns');
-        try {
-          await generateSimpleKenBurns(
-            imagePath,
-            outputPath,
-            config,
-            duration,
-            fps,
-            width,
-            height,
-          );
+    // Try methods in order: ONNX > Python > Ken Burns
+    // 1. Try ONNX (Node.js native, no external dependencies)
+    const onnxAvailable = await isParallaxONNXAvailable();
+    if (onnxAvailable) {
+      console.log('[ParallaxEngine] Trying ONNX depth estimation (Node.js native)...');
+      try {
+        const success = await generateParallaxONNX(imagePath, outputPath, config, duration, fps);
+        if (success && fs.existsSync(outputPath)) {
           const buffer = fs.readFileSync(outputPath);
+          console.log(`[ParallaxEngine] ONNX parallax created: ${buffer.length} bytes`);
           return buffer;
-        } catch (fallbackError) {
-          console.error('[ParallaxEngine] Ken Burns fallback also failed:', fallbackError);
-          throw fallbackError;
         }
+      } catch (onnxError) {
+        console.warn('[ParallaxEngine] ONNX failed:', onnxError);
       }
+    }
 
-      throw error;
+    // 2. Try Python depth estimation
+    const pythonAvailable = await checkPythonDepth();
+    if (pythonAvailable) {
+      console.log('[ParallaxEngine] Trying Python depth estimation (Depth Anything V2)...');
+      try {
+        await generateDepthParallax(imagePath, outputPath, config, duration, fps);
+        if (fs.existsSync(outputPath)) {
+          const buffer = fs.readFileSync(outputPath);
+          console.log(`[ParallaxEngine] Python parallax created: ${buffer.length} bytes`);
+          return buffer;
+        }
+      } catch (pythonError) {
+        console.warn('[ParallaxEngine] Python failed:', pythonError);
+      }
+    }
+
+    // 3. Fall back to Ken Burns effect
+    console.log('[ParallaxEngine] Using Ken Burns effect (fallback)');
+    try {
+      await generateSimpleKenBurns(imagePath, outputPath, config, duration, fps, width, height);
+      const buffer = fs.readFileSync(outputPath);
+      console.log(`[ParallaxEngine] Ken Burns video created: ${buffer.length} bytes`);
+      return buffer;
+    } catch (kenBurnsError) {
+      console.error('[ParallaxEngine] Ken Burns also failed:', kenBurnsError);
+      throw kenBurnsError;
     }
   }
 

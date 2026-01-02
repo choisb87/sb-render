@@ -15,25 +15,41 @@ import { spawn, execSync } from 'child_process';
 // Script is at project_root/scripts/depth_parallax.py
 const DEPTH_SCRIPT_PATH = path.join(__dirname, '../../../../scripts/depth_parallax.py');
 
+// Python executable path - prefer mounted venv, fallback to system python3
+const PYTHON_PATHS = ['/opt/venv/bin/python3', 'python3'];
+let pythonPath: string | null = null;
+
 // Check if Python depth estimation is available
 let pythonDepthAvailable: boolean | null = null;
+
+function findPythonPath(): string | null {
+  for (const pyPath of PYTHON_PATHS) {
+    try {
+      execSync(`${pyPath} -c "import torch; import transformers"`, { stdio: 'pipe' });
+      console.log(`[ParallaxEngine] Found working Python at: ${pyPath}`);
+      return pyPath;
+    } catch {
+      // Try next path
+    }
+  }
+  return null;
+}
 
 async function checkPythonDepth(): Promise<boolean> {
   if (pythonDepthAvailable !== null) return pythonDepthAvailable;
 
-  try {
-    // Check if Python and required packages are available
-    execSync('python3 -c "import torch; import transformers"', { stdio: 'pipe' });
-    if (fs.existsSync(DEPTH_SCRIPT_PATH)) {
-      pythonDepthAvailable = true;
-      console.log('[ParallaxEngine] Python depth estimation available');
+  pythonPath = findPythonPath();
+
+  if (pythonPath && fs.existsSync(DEPTH_SCRIPT_PATH)) {
+    pythonDepthAvailable = true;
+    console.log('[ParallaxEngine] Python depth estimation available');
+  } else {
+    pythonDepthAvailable = false;
+    if (!pythonPath) {
+      console.log('[ParallaxEngine] Python depth estimation not available (missing torch/transformers)');
     } else {
-      pythonDepthAvailable = false;
       console.log('[ParallaxEngine] Depth script not found:', DEPTH_SCRIPT_PATH);
     }
-  } catch {
-    pythonDepthAvailable = false;
-    console.log('[ParallaxEngine] Python depth estimation not available (missing torch/transformers)');
   }
 
   return pythonDepthAvailable;
@@ -60,9 +76,10 @@ async function generateDepthParallax(
       zoom: config.zoom || 'none',
     });
 
-    console.log(`[ParallaxEngine] Running depth estimation: python3 ${DEPTH_SCRIPT_PATH}`);
+    const pyExe = pythonPath || 'python3';
+    console.log(`[ParallaxEngine] Running depth estimation: ${pyExe} ${DEPTH_SCRIPT_PATH}`);
 
-    const proc = spawn('python3', [DEPTH_SCRIPT_PATH, imagePath, outputPath, options], {
+    const proc = spawn(pyExe, [DEPTH_SCRIPT_PATH, imagePath, outputPath, options], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

@@ -10,6 +10,8 @@ This is an n8n community node for video rendering with customizable subtitles, b
 - 🎙️ Narration audio with timing control
 - 📝 Customizable subtitles with extensive styling options
 - 🎨 Multiple output formats and quality presets
+- 🖼️ AI-powered parallax effects from static images (Depth Anything V2)
+- 🔀 Video merging with transitions and audio sync
 
 Inspired by [n8n-nodes-mediafx](https://github.com/dandacompany/n8n-nodes-mediafx).
 
@@ -18,6 +20,7 @@ Inspired by [n8n-nodes-mediafx](https://github.com/dandacompany/n8n-nodes-mediaf
 - [Installation](#installation)
 - [Prerequisites](#prerequisites)
 - [Operations](#operations)
+- [Parallax Effect](#parallax-effect)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Development](#development)
@@ -98,6 +101,66 @@ Compose a video with optional background music, narration, and subtitles.
 - ✅ Multiple output formats (MP4, MOV, WebM)
 - ✅ Quality presets (Low, Medium, High, Custom)
 - ✅ Smart audio merging (handles mixed audio/silent video inputs)
+
+### Image → Parallax
+
+Create 2.5D parallax video effects from static images using AI depth estimation.
+
+**Features:**
+- ✅ AI-powered depth estimation (Depth Anything V2)
+- ✅ True layer separation with inpainting
+- ✅ Direction + Zoom combination effects
+- ✅ Intensity control (subtle, normal, dramatic)
+- ✅ Falls back to Ken Burns effect if AI not available
+
+## Parallax Effect
+
+The parallax feature uses **Depth Anything V2** AI model to create professional 2.5D parallax effects from static images.
+
+### How It Works
+
+1. **Depth Estimation**: AI model analyzes the image to create a depth map
+2. **Layer Separation**: Foreground is extracted based on depth (closer objects)
+3. **Inpainting**: Background is filled where foreground was removed
+4. **Animation**: Layers move at different speeds creating parallax illusion
+
+### Parameters
+
+| Parameter | Type | Options | Description |
+|-----------|------|---------|-------------|
+| **direction** | String | `left`, `right`, `up`, `down` | Pan direction |
+| **zoom** | String | `none`, `in`, `out` | Zoom effect (combinable with direction) |
+| **intensity** | String | `subtle`, `normal`, `dramatic` | Movement intensity |
+| **duration** | Number | seconds | Video duration |
+
+### Combined Effects
+
+You can combine zoom with direction for richer effects:
+
+```json
+{
+  "direction": "left",
+  "zoom": "in",
+  "intensity": "normal",
+  "duration": 5
+}
+```
+
+**Effect Combinations:**
+- `left` + `zoomIn`: Pan left while zooming in
+- `right` + `zoomOut`: Pan right while zooming out
+- `up` + `zoomIn`: Pan up with zoom in
+- `zoomIn` only: Pure zoom in effect (set direction to empty)
+
+### Requirements for AI Parallax
+
+For AI-powered depth parallax, the following Python packages are required on the server:
+
+```bash
+pip3 install torch transformers pillow opencv-python-headless
+```
+
+If not available, the node automatically falls back to Ken Burns (zoompan) effect.
 
 ## Configuration
 

@@ -319,11 +319,24 @@ export class VideoComposer implements IVideoComposer {
         const videoFilters: string[] = [];
 
         // Half frame rate if enabled (doubles duration)
-        // Use actual video stream duration (frame length), not max duration
-        // This ensures tpad is applied when audio is longer than video frames
-        const actualVideoDuration = videoMetadata.videoDuration || videoDuration;
+        // CRITICAL: For syncToAudio, we need the VIDEO-ONLY duration (frame length)
+        // NOT the max duration which may include audio from an already-merged source.
+        // videoMetadata.videoDuration = video stream duration only
+        // videoDuration = max(format, video, audio) - may include embedded audio
+        let actualVideoDuration: number;
+        if (videoMetadata.videoDuration && videoMetadata.videoDuration > 0) {
+          // Use video stream duration directly (most accurate)
+          actualVideoDuration = videoMetadata.videoDuration;
+          console.log(`[ComposeAudioMix] Using video stream duration: ${actualVideoDuration}s`);
+        } else {
+          // Fallback: If no video stream duration, use format duration
+          // but be aware this might include audio duration
+          actualVideoDuration = videoDuration;
+          console.log(`[ComposeAudioMix] ⚠️ No video stream duration, using format duration: ${actualVideoDuration}s`);
+        }
+
         let currentVideoDuration = actualVideoDuration;
-        console.log(`[ComposeAudioMix] Video frame duration: ${actualVideoDuration}s, narration: ${narrationDuration}s`);
+        console.log(`[ComposeAudioMix] Video frame duration: ${actualVideoDuration}s, narration: ${narrationDuration}s, syncToAudio: ${config.syncToAudio}`);
         if (config.halfFrameRate) {
           // Slow down video by doubling PTS and maintaining consistent frame timing
           videoFilters.push('setpts=2.0*PTS');
@@ -331,9 +344,10 @@ export class VideoComposer implements IVideoComposer {
         }
 
         // If narration is longer than video AND sync enabled, stretch video to match audio
+        console.log(`[ComposeAudioMix] SyncToAudio check: enabled=${config.syncToAudio}, narration=${narrationDuration}s, video=${currentVideoDuration}s, shouldSync=${config.syncToAudio && narrationDuration > currentVideoDuration}`);
         if (config.syncToAudio && narrationDuration > currentVideoDuration) {
           const slowDownFactor = narrationDuration / currentVideoDuration;
-          console.log(`[ComposeAudioMix] Syncing video to audio: slowing down by factor ${slowDownFactor.toFixed(4)}`);
+          console.log(`[ComposeAudioMix] ✅ Syncing video to audio: slowing down by factor ${slowDownFactor.toFixed(4)}`);
           videoFilters.push(`setpts=${slowDownFactor.toFixed(6)}*PTS`);
 
           // IMPORTANT: When slowing down video significantly, frame rate drops.

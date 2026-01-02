@@ -261,62 +261,11 @@ export class VideoComposer implements IVideoComposer {
           debugLog(`[ComposeAudioMix] Generated filter chain: ${finalAudioFilterChain}`);
         }
 
-        // Apply complex audio filter with fallback to simple approach
-        if (finalAudioFilterChain && finalAudioFilterChain.trim() !== '') {
-          console.log(`[ComposeAudioMix] Attempting complex filter: ${finalAudioFilterChain}`);
-          debugLog(`[ComposeAudioMix] Filter chain: ${finalAudioFilterChain}`);
-          
-          try {
-            // Validate filter chain before applying
-            if (finalAudioFilterChain.includes('[mixed]')) {
-              command.complexFilter(finalAudioFilterChain);
-              console.log(`[ComposeAudioMix] ✅ Complex filter applied successfully`);
-            } else {
-              throw new Error('Filter chain missing [mixed] output');
-            }
-          } catch (filterError) {
-            console.error(`[ComposeAudioMix] ❌ Complex filter failed, falling back to simple audio mapping:`, filterError);
-            debugLog(`[ComposeAudioMix] Complex filter error: ${filterError}`);
-            
-            // Fallback to simple audio mapping
-            finalAudioFilterChain = '';
-            
-            // Simple audio mapping based on what inputs we have
-            if (bgmPath && narrationPath) {
-              // Use simple audio filters instead of complex filter
-              command.audioFilters([
-                {
-                  filter: 'volume',
-                  options: (config.bgmVolume || 30) / 100
-                }
-              ]);
-            } else if (bgmPath) {
-              command.audioFilters([
-                {
-                  filter: 'volume',
-                  options: (config.bgmVolume || 30) / 100
-                }
-              ]);
-            }
-          }
-        } else {
-          console.log(`[ComposeAudioMix] No complex audio filter, using simple audio mapping`);
-          debugLog(`[ComposeAudioMix] Empty or invalid filter chain: "${finalAudioFilterChain}"`);
-          
-          // Apply simple volume control if BGM is present
-          if (bgmPath) {
-            console.log(`[ComposeAudioMix] Applying simple BGM volume: ${config.bgmVolume || 30}%`);
-            command.audioFilters([
-              {
-                filter: 'volume',
-                options: (config.bgmVolume || 30) / 100
-              }
-            ]);
-          }
-        }
+        // NOTE: Audio filter chain is stored in finalAudioFilterChain
+        // We will combine it with video filters later to create a unified filter_complex
 
-        // Video filters
-        const videoFilters: string[] = [];
+        // Video filters - build as part of filter_complex to avoid conflicts
+        const videoFilterParts: string[] = [];
 
         // Half frame rate if enabled (doubles duration)
         // CRITICAL: For syncToAudio, we need the VIDEO-ONLY duration (frame length)
@@ -339,7 +288,7 @@ export class VideoComposer implements IVideoComposer {
         console.log(`[ComposeAudioMix] Video frame duration: ${actualVideoDuration}s, narration: ${narrationDuration}s, syncToAudio: ${config.syncToAudio}`);
         if (config.halfFrameRate) {
           // Slow down video by doubling PTS and maintaining consistent frame timing
-          videoFilters.push('setpts=2.0*PTS');
+          videoFilterParts.push('setpts=2.0*PTS');
           currentVideoDuration *= 2;
         }
 
@@ -348,12 +297,12 @@ export class VideoComposer implements IVideoComposer {
         if (config.syncToAudio && narrationDuration > currentVideoDuration) {
           const slowDownFactor = narrationDuration / currentVideoDuration;
           console.log(`[ComposeAudioMix] ✅ Syncing video to audio: slowing down by factor ${slowDownFactor.toFixed(4)}`);
-          videoFilters.push(`setpts=${slowDownFactor.toFixed(6)}*PTS`);
+          videoFilterParts.push(`setpts=${slowDownFactor.toFixed(6)}*PTS`);
 
           // IMPORTANT: When slowing down video significantly, frame rate drops.
           // We must resample to a standard frame rate (e.g., 24fps) to ensure
           // there are enough frames for subtitles to be rendered correctly.
-          videoFilters.push('fps=24');
+          videoFilterParts.push('fps=24');
           currentVideoDuration = narrationDuration; // Update after stretching
         }
 
@@ -363,7 +312,7 @@ export class VideoComposer implements IVideoComposer {
           const extensionDuration = narrationDuration - currentVideoDuration + 1; // +1s buffer
           console.log(`[ComposeAudioMix] Extending video by ${extensionDuration.toFixed(2)}s to match narration (tpad)`);
           // tpad freezes the last frame for the specified duration
-          videoFilters.push(`tpad=stop_mode=clone:stop_duration=${extensionDuration.toFixed(3)}`);
+          videoFilterParts.push(`tpad=stop_mode=clone:stop_duration=${extensionDuration.toFixed(3)}`);
         }
 
         // Add subtitle overlay if present
@@ -372,11 +321,46 @@ export class VideoComposer implements IVideoComposer {
           // __dirname is dist/nodes/SbRender/services, go up 4 levels to package root
           const fontsDir = join(dirname(dirname(dirname(dirname(__dirname)))), 'fonts');
           const escapedFontsDir = fontsDir.replace(/\\/g, '/').replace(/:/g, '\\:');
-          videoFilters.push(`ass=${escapedPath}:fontsdir=${escapedFontsDir}`);
+          videoFilterParts.push(`ass=${escapedPath}:fontsdir=${escapedFontsDir}`);
         }
 
-        if (videoFilters.length > 0) {
-          command.videoFilters(videoFilters);
+        // Build video filter chain for filter_complex
+        let videoFilterChain = '';
+        const hasVideoFilters = videoFilterParts.length > 0;
+        if (hasVideoFilters) {
+          videoFilterChain = `[0:v]${videoFilterParts.join(',')}[vout]`;
+          console.log(`[ComposeAudioMix] Video filter chain: ${videoFilterChain}`);
+        }
+
+        // Combine video and audio filter chains into a single filter_complex
+        const hasAudioFilters = finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]');
+        let combinedFilterComplex = '';
+
+        if (hasVideoFilters && hasAudioFilters) {
+          // Both video and audio filters - combine them
+          combinedFilterComplex = `${videoFilterChain};${finalAudioFilterChain}`;
+          console.log(`[ComposeAudioMix] Combined filter_complex: ${combinedFilterComplex}`);
+        } else if (hasVideoFilters) {
+          // Only video filters
+          combinedFilterComplex = videoFilterChain;
+          console.log(`[ComposeAudioMix] Video-only filter_complex: ${combinedFilterComplex}`);
+        } else if (hasAudioFilters) {
+          // Only audio filters
+          combinedFilterComplex = finalAudioFilterChain;
+          console.log(`[ComposeAudioMix] Audio-only filter_complex: ${combinedFilterComplex}`);
+        }
+
+        // Apply the combined filter_complex
+        if (combinedFilterComplex) {
+          try {
+            command.complexFilter(combinedFilterComplex);
+            console.log(`[ComposeAudioMix] ✅ Combined filter_complex applied successfully`);
+          } catch (filterError) {
+            console.error(`[ComposeAudioMix] ❌ Combined filter_complex failed:`, filterError);
+            debugLog(`[ComposeAudioMix] Combined filter error: ${filterError}`);
+            // Reset flags to use simple mapping
+            finalAudioFilterChain = '';
+          }
         }
 
         // Set output codec and quality
@@ -393,29 +377,39 @@ export class VideoComposer implements IVideoComposer {
           outputOptions.push('-r 24');
         }
 
-        // Map video and mixed audio with safe fallback
-        if (finalAudioFilterChain && finalAudioFilterChain.includes('[mixed]')) {
-          // Complex filter was successfully applied
-          console.log(`[ComposeAudioMix] Using complex filter output mapping`);
-          outputOptions.unshift('-map [mixed]', '-map 0:v');
+        // Map video and audio outputs based on what filters were applied
+        if (hasVideoFilters && hasAudioFilters) {
+          // Both video and audio filters applied
+          console.log(`[ComposeAudioMix] Mapping filtered video [vout] and audio [mixed]`);
+          outputOptions.unshift('-map [vout]', '-map [mixed]');
+        } else if (hasVideoFilters) {
+          // Only video filters - use filtered video, original/simple audio
+          console.log(`[ComposeAudioMix] Mapping filtered video [vout] with original audio`);
+          if (narrationPath) {
+            outputOptions.unshift('-map [vout]', '-map 1:a');
+          } else if (bgmPath) {
+            outputOptions.unshift('-map [vout]', '-map 1:a');
+          } else {
+            outputOptions.unshift('-map [vout]', '-map 0:a?');
+          }
+        } else if (hasAudioFilters) {
+          // Only audio filters - use original video, filtered audio
+          console.log(`[ComposeAudioMix] Mapping original video with filtered audio [mixed]`);
+          outputOptions.unshift('-map 0:v', '-map [mixed]');
         } else if (bgmPath || narrationPath) {
-          // Simple audio mapping when complex filter failed or not used
+          // Simple audio mapping when no complex filters
           console.log(`[ComposeAudioMix] Using simple audio mapping - BGM: ${!!bgmPath}, Narration: ${!!narrationPath}`);
           if (bgmPath && !narrationPath) {
-            // BGM only - map BGM audio and video
-            outputOptions.unshift('-map 1:a', '-map 0:v');
+            outputOptions.unshift('-map 0:v', '-map 1:a');
           } else if (narrationPath && !bgmPath) {
-            // Narration only - map narration audio and video
-            const narrationIndex = videoMetadata.hasAudio ? 1 : 1;
-            outputOptions.unshift(`-map ${narrationIndex}:a`, '-map 0:v');
+            outputOptions.unshift('-map 0:v', '-map 1:a');
           } else {
-            // Both BGM and narration - use first audio input (BGM)
-            outputOptions.unshift('-map 1:a', '-map 0:v');
+            outputOptions.unshift('-map 0:v', '-map 1:a');
           }
         } else {
           // No additional audio - preserve original if exists
           console.log(`[ComposeAudioMix] Preserving original audio only`);
-          outputOptions.unshift('-map 0:a?', '-map 0:v');
+          outputOptions.unshift('-map 0:v', '-map 0:a?');
         }
 
         command
@@ -570,13 +564,43 @@ export class VideoComposer implements IVideoComposer {
         // Use the maximum of format duration, video stream duration, and audio stream duration
         // This prevents audio from being cut off when audio is slightly longer than video
         const formatDuration = metadata.format.duration || 0;
-        const videoDuration = videoStream.duration ? parseFloat(String(videoStream.duration)) : 0;
+
+        // Calculate video stream duration - try stream duration first, then calculate from frames
+        // Use type assertion for ffprobe stream properties not in the basic type definition
+        const extendedVideoStream = videoStream as typeof videoStream & {
+          nb_frames?: string;
+          avg_frame_rate?: string;
+        };
+
+        let videoDuration = videoStream.duration ? parseFloat(String(videoStream.duration)) : 0;
+
+        // If no stream duration, calculate from nb_frames and fps
+        if (videoDuration <= 0 && extendedVideoStream.nb_frames) {
+          const nbFrames = parseInt(String(extendedVideoStream.nb_frames), 10);
+          // Try r_frame_rate first (e.g., "30/1" or "30000/1001"), then avg_frame_rate
+          const frameRateStr = videoStream.r_frame_rate || extendedVideoStream.avg_frame_rate || '24/1';
+          const [num, den] = frameRateStr.split('/').map(Number);
+          const fps = den > 0 ? num / den : num || 24;
+          videoDuration = nbFrames / fps;
+          console.log(`[Metadata] Video duration calculated from frames: ${nbFrames} frames / ${fps} fps = ${videoDuration.toFixed(3)}s`);
+        }
+
         const audioDuration = audioStream?.duration ? parseFloat(String(audioStream.duration)) : 0;
         const maxDuration = Math.max(formatDuration, videoDuration, audioDuration) || 10;
 
-        console.log(`[Metadata] Durations - format: ${formatDuration}s, video: ${videoDuration}s, audio: ${audioDuration}s, using: ${maxDuration}s`);
+        // Extract FPS for metadata
+        let fps: number | undefined;
+        if (videoStream.r_frame_rate) {
+          const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
+          fps = den > 0 ? num / den : num;
+        } else if (extendedVideoStream.avg_frame_rate) {
+          const [num, den] = extendedVideoStream.avg_frame_rate.split('/').map(Number);
+          fps = den > 0 ? num / den : num;
+        }
 
-        const result = {
+        console.log(`[Metadata] Durations - format: ${formatDuration}s, video: ${videoDuration}s, audio: ${audioDuration}s, using: ${maxDuration}s, fps: ${fps || 'unknown'}`);
+
+        const result: IVideoMetadata = {
           duration: maxDuration,
           width: videoStream.width || 1920,
           height: videoStream.height || 1080,
@@ -585,6 +609,7 @@ export class VideoComposer implements IVideoComposer {
           audioCodec: audioStream?.codec_name,
           videoDuration: videoDuration > 0 ? videoDuration : undefined,
           audioDuration: audioDuration > 0 ? audioDuration : undefined,
+          fps,
         };
 
         console.log(`[Metadata] ✅ Result:`, result);

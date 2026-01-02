@@ -49,3 +49,4 @@ publish.bat
 npm_recovery_codes.txt
 .env
 .claude/
+__pycache__/

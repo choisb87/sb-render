@@ -51,3 +51,4 @@ npm_recovery_codes.txt
 .claude/
 __pycache__/
 scripts/restart-n8n.sh
+CLAUDE.md

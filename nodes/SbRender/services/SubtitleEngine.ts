@@ -311,7 +311,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     // Default configuration for SRT-based subtitles
     const config = {
       position: 'bottom' as const,
-      fontSize: 90,
+      fontSize: 75,
       fontColor: '#FFFFFF',
       fontFamily: 'NanumGothic',
       alignment: 'center' as const,

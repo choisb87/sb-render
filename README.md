@@ -202,7 +202,7 @@ If not available, the node automatically falls back to Ken Burns (zoompan) effec
 | **Start Time** | Number | - | Start time in seconds |
 | **End Time** | Number | - | End time in seconds |
 | **Position** | Options | bottom | `top`, `middle`, `bottom`, `custom` |
-| **Font Size** | Number | 90 | Text size |
+| **Font Size** | Number | 75 | Text size |
 | **Font Color** | Color | #FFFFFF | Text color (hex) |
 | **Font Family** | String | Arial | Font name |
 | **Alignment** | Options | center | `left`, `center`, `right` |

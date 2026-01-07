@@ -28,6 +28,7 @@
     "format": "prettier nodes --write",
     "lint": "eslint nodes --ext .ts",
     "lintfix": "eslint nodes --ext .ts --fix",
+    "test": "jest",
     "prepublishOnly": "npm run build && npm run lint",
     "postinstall": "node scripts/fix-ffprobe-permissions.js"
   },
@@ -44,6 +45,7 @@
     ]
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/node": "^18.16.0",
     "@types/node-fetch": "^2.6.13",
     "@typescript-eslint/eslint-plugin": "^5.59.0",
@@ -51,8 +53,10 @@
     "eslint": "^8.40.0",
     "eslint-plugin-n8n-nodes-base": "^1.11.0",
     "gulp": "^4.0.2",
+    "jest": "^29.7.0",
     "n8n-workflow": "^1.0.0",
     "prettier": "^2.8.8",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.4"
   },
